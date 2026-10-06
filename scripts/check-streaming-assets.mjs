@@ -76,7 +76,10 @@ try {
     () => {
       const s = window.__streaming?.();
       const scene = window.__fog?.frameGraph?.().scene;
-      return s?.dynamicMovers > 0 && scene?.getObjectByName('streamed-active-xinba-pavilion-fixture')?.visible === true;
+      return s?.dynamicMovers > 0 &&
+        s?.lighting?.readyChunks === 1 &&
+        s?.lighting?.chartsUsed === 1 &&
+        scene?.getObjectByName('streamed-active-xinba-pavilion-fixture')?.visible === true;
     },
     'Active GLB did not enter the dynamic BVH',
   );
@@ -90,6 +93,9 @@ try {
   assert.equal(report.active.proxyVisible, false, 'near camera must hide Proxy GLB');
   assert.ok(report.active.stream.dynamicTriangles > 0, 'Active GLB must contribute dynamic BVH triangles');
   assert.ok(report.active.stream.dynamicMovers > 0, 'Active GLB must contribute a dynamic BVH mover');
+  assert.equal(report.active.stream.lighting.readyChunks, 1, 'Active chunk must validate and register its XVLM package');
+  assert.equal(report.active.stream.lighting.chartsUsed, 1, 'XVLM chart must occupy the world chart registry');
+  assert.equal(report.active.stream.lighting.packageTileSize, 64, 'XVLM tile shape must reach runtime diagnostics');
 
   await move(28, 9, 0, 2);
   await waitFor(
@@ -109,6 +115,8 @@ try {
   assert.ok(report.proxy.stream.dynamicSceneRevision > activeDynamicRevision, 'Proxy transition must revise Dynamic BVH membership');
   assert.equal(report.proxy.proxyVisible, true, 'prefetch range must show Proxy GLB');
   assert.equal(report.proxy.stream.dynamicTriangles, 0, 'Proxy GLB must stay out of dynamic BVH');
+  assert.equal(report.proxy.stream.lighting.activeChunks, 0, 'Proxy tier must release Active chunk lighting ownership');
+  assert.equal(report.proxy.stream.lighting.chartsUsed, 0, 'Proxy tier must release world chart slots');
 
   await move(82, 9, 82, 0);
   await waitFor(
@@ -127,6 +135,7 @@ try {
   assert.equal(report.unloaded.stream.staticSceneRevision, staticRevision, 'unload must not rebuild Static BVH');
   assert.equal(report.unloaded.activeExists, false, 'unloaded Active GLB must leave the scene');
   assert.equal(report.unloaded.proxyExists, false, 'unloaded Proxy GLB must leave the scene');
+  assert.equal(report.unloaded.stream.lighting.chartsUsed, 0, 'unloaded chunk must not retain lightmap chart slots');
 
   const beforeReturnRevision = report.unloaded.stream.dynamicSceneRevision;
   await move(9, 10, 0, 2);
@@ -134,7 +143,9 @@ try {
     () => {
       const s = window.__streaming?.();
       const scene = window.__fog?.frameGraph?.().scene;
-      return s?.dynamicMovers > 0 && scene?.getObjectByName('streamed-active-xinba-pavilion-fixture')?.visible === true;
+      return s?.dynamicMovers > 0 &&
+        s?.lighting?.readyChunks === 1 &&
+        scene?.getObjectByName('streamed-active-xinba-pavilion-fixture')?.visible === true;
     },
     'returning to the chunk did not reload Active GLB',
   );
@@ -145,6 +156,8 @@ try {
   assert.ok(report.returned.stream.dynamicSceneRevision > beforeReturnRevision, 'reload must revise Dynamic BVH membership');
   assert.equal(report.returned.activeVisible, true, 'returning must restore Active GLB');
   assert.equal(report.returned.proxyVisible, false, 'returning must hide Proxy GLB');
+  assert.equal(report.returned.stream.lighting.readyChunks, 1, 'returning must reload and validate XVLM');
+  assert.equal(report.returned.stream.lighting.chartsUsed, 1, 'returning Active chunk must reacquire chart ownership');
 
   assert.deepEqual(errors, [], `browser errors: ${errors.join(' | ')}`);
   await writeFile(`${out}/check.json`, JSON.stringify(report, null, 2));
