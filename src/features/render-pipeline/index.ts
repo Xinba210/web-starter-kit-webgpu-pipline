@@ -294,6 +294,7 @@ function installHooks(p: Pipeline, state: { paused: boolean; stepOnce: boolean; 
     sunPos: host.sun.position.toArray(), sunIntensity: host.sun.intensity, camera: camera.position.toArray(), target: controls.target.toArray(),
     fov: camera.fov, lightCfg: { ...sun.lightCfg }, giLights: giLightSummary(), pipeline: 'render-pipeline',
   }));
+  if (host.streaming?.snapshot) hook('__streaming', () => host.streaming?.snapshot?.() ?? null);
   hook('__camera', (px: number, py: number, pz: number, tx: number, ty: number, tz: number) => {
     camera.position.set(px, py, pz); controls.target.set(tx, ty, tz); controls.update(); camera.updateMatrixWorld(); return true;
   });
