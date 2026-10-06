@@ -25,3 +25,10 @@ export {
   type ChunkStreamingSnapshot,
   type ChunkTier,
 } from './chunkStreamer.ts';
+
+export {
+  StreamedSceneRuntime,
+  type StreamedChunkPackage,
+  type StreamedChunkProvider,
+  type StreamedSceneChanges,
+} from './streamedScene.ts';
