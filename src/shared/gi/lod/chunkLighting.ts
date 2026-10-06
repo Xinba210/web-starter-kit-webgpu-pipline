@@ -6,6 +6,7 @@ import {
   loadChunkLightmapPackage,
   type DecodedChunkLightmapPackage,
 } from './chunkLightmapPackage.ts';
+import type { PinnedFallbackPool } from './fallbackPool.ts';
 import {
   WorldLightmapRegistry,
   type RegisteredChunkLightmap,
@@ -43,6 +44,7 @@ export class ChunkLightingRuntime implements StreamedChunkLightingController {
     chartCapacity = 65536,
     tileCapacity = 262144,
     private readonly loadPackage: ChunkPackageLoader = loadChunkLightmapPackage,
+    private readonly fallbackPool?: PinnedFallbackPool,
   ) {
     this.registry = new WorldLightmapRegistry(chartCapacity, tileCapacity);
   }
@@ -77,6 +79,7 @@ export class ChunkLightingRuntime implements StreamedChunkLightingController {
     if (!entry) return;
     this.active.delete(owner);
     entry.controller.abort();
+    this.fallbackPool?.release(owner);
     if (entry.registered) this.registry.unregister(owner);
   }
 
@@ -95,6 +98,7 @@ export class ChunkLightingRuntime implements StreamedChunkLightingController {
     failedChunks: number;
     packageTileSize: number | null;
     packageBorder: number | null;
+    fallback: unknown;
     chunks: Array<{
       owner: string;
       state: string;
@@ -122,6 +126,7 @@ export class ChunkLightingRuntime implements StreamedChunkLightingController {
       failedChunks: entries.filter((entry) => entry.state === 'failed').length,
       packageTileSize: this.packageTileSize,
       packageBorder: this.packageBorder,
+      fallback: this.fallbackPool?.snapshot() ?? null,
       chunks: entries
         .sort((a, b) => (a.registered?.charts.base ?? Number.MAX_SAFE_INTEGER) - (b.registered?.charts.base ?? Number.MAX_SAFE_INTEGER))
         .map((entry) => ({
@@ -152,12 +157,14 @@ export class ChunkLightingRuntime implements StreamedChunkLightingController {
       }
       entry.registered = registered;
       entry.remappedGeometries = remapLightmapCharts(entry.root, registered.charts);
+      this.fallbackPool?.pin(entry.owner, packageValue, registered, this.registry);
       entry.package = packageValue;
       this.packageTileSize ??= packageValue.tileSize;
       this.packageBorder ??= packageValue.border;
       entry.state = 'ready';
     } catch (error) {
       if (!this.isCurrent(entry) || entry.controller.signal.aborted) return;
+      this.fallbackPool?.release(entry.owner);
       if (entry.registered) {
         this.registry.unregister(entry.owner);
         entry.registered = undefined;
