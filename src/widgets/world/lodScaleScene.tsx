@@ -3,7 +3,7 @@ import * as THREE from 'three/webgpu';
 import { color as tslColor } from 'three/tsl';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createScene } from '../../shared/gi/surfel/scene.ts';
-import { ChunkLightingRuntime } from '../../shared/gi/lod/index.ts';
+import { ChunkLightingRuntime, PinnedFallbackPool } from '../../shared/gi/lod/index.ts';
 import { Layer, StreamedSceneRuntime, chunkWorldOrigin, createGltfChunkProvider, type StreamedAssetManifest } from '../../shared/world/index.ts';
 import { createFiberSceneRoot, StaticGroup } from '../../shared/fiber/index.ts';
 import { bootStage } from '../../shared/ui/bootProgress.ts';
@@ -135,7 +135,7 @@ function LongWall() {
  * (`lightmap={false}`): they are occluders, and thousands of thin charts would only fill
  * the tail.
  */
-async function createChunkStreamLab(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Promise<StreamedSceneRuntime | null> {
+async function createChunkStreamLab(renderer: THREE.WebGPURenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera): Promise<StreamedSceneRuntime | null> {
   const params = new URLSearchParams(location.search);
   const mode = params.get('chunks');
   if (mode !== '1' && mode !== 'asset') return null;
@@ -152,7 +152,8 @@ async function createChunkStreamLab(scene: THREE.Scene, camera: THREE.Perspectiv
   };
 
   let streaming: StreamedSceneRuntime;
-  const chunkLighting = new ChunkLightingRuntime();
+  const fallbackPool = new PinnedFallbackPool(renderer, 64, 2, 16);
+  const chunkLighting = new ChunkLightingRuntime(65536, 262144, undefined, fallbackPool);
   if (mode === 'asset') {
     const response = await fetch('/streaming/xinba-pavilion/manifest.json');
     if (!response.ok) throw new Error(`streaming fixture manifest failed: HTTP ${response.status}`);
@@ -240,7 +241,7 @@ export async function createLodScaleScene(renderer: THREE.WebGPURenderer): Promi
     </group>,
   ));
   window.addEventListener('resize', () => fiber.resize(renderer.domElement.clientWidth, renderer.domElement.clientHeight));
-  const chunkStream = await createChunkStreamLab(scene, camera);
+  const chunkStream = await createChunkStreamLab(renderer, scene, camera);
 
   return {
     scene,
