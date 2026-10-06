@@ -102,7 +102,7 @@ export class StreamedSceneRuntime {
     return changes;
   }
 
-  snapshot(): ChunkStreamingSnapshot & { revision: number; dynamicSyncCount: number } {
+  snapshot(): ChunkStreamingSnapshot & { revision: number; dynamicSyncCount: number; lighting: unknown } {
     return {
       ...this.streamer.snapshot(),
       revision: this.revision,
