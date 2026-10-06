@@ -21,6 +21,8 @@ export type TileResolver = (chart: number, level: number, atlasX: number, atlasY
  */
 export class DemandFeedback {
   requests = new Set<number>();
+  /** Screen-space demand weight per tile. Larger visible coverage wins under a tight pool/upload budget. */
+  priorities = new Map<number, number>();
   private readonly target: THREE.RenderTarget;
   private readonly material: THREE.NodeMaterial;
   private readonly sourceSize = uniform(new THREE.Vector2(1, 1));
@@ -94,6 +96,7 @@ export class DemandFeedback {
     try {
       const raw = await this.renderer.readRenderTargetPixelsAsync(this.target, 0, 0, this.target.width, this.target.height) as Float32Array;
       const fresh = new Set<number>();
+      const priorities = new Map<number, number>();
       let drawn = 0;
       let onTail = 0;
       const levels: Record<number, number> = {};
@@ -106,9 +109,13 @@ export class DemandFeedback {
         levels[level] = (levels[level] ?? 0) + 1;
         const key = this.resolve(chart, level, raw[pixel + 1], raw[pixel + 2]);
         if (key === null) onTail++;
-        else fresh.add(key);
+        else {
+          fresh.add(key);
+          priorities.set(key, (priorities.get(key) ?? 0) + 1);
+        }
       }
       this.requests = fresh;
+      this.priorities = priorities;
       this.drawnLastRead = drawn;
       this.levelsLastRead = levels;
       this.onTailLastRead = onTail;
