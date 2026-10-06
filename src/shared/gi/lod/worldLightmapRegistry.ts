@@ -74,7 +74,9 @@ export class WorldLightmapRegistry {
     const charts = this.chartSlots.allocate(owner, index.charts.length);
     let tiles: ChartAllocation;
     try {
-      tiles = this.tileSlots.allocate(owner, Math.max(1, index.tiles.length));
+      tiles = index.tiles.length > 0
+        ? this.tileSlots.allocate(owner, index.tiles.length)
+        : { owner, base: 0, count: 0, generation: 0 };
     } catch (error) {
       this.chartSlots.release(owner);
       throw error;
@@ -117,7 +119,7 @@ export class WorldLightmapRegistry {
     }
 
     this.chartSlots.release(owner);
-    this.tileSlots.release(owner);
+    if (chunk.tiles.count > 0) this.tileSlots.release(owner);
     return true;
   }
 
