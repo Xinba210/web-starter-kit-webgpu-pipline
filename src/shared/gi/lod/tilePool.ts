@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { Fn, attribute, dFdx, dFdy, exp2, float, floor, int, ivec2, max, min, texture, textureLoad, uniform, vec2, vec3, vec4 } from 'three/tsl';
 import { TILE_BORDER, type ChartPyramidSet } from './chartPyramids.ts';
 import { CHART_RECORD_ENTRIES, PAGE_TABLE_WIDTH, TileResidency, type ResidencyOptions } from './tileResidency.ts';
+import { MemoryLightmapTileSource, type LightmapTileSource } from './tileSource.ts';
 
 const HALF_FLOAT_TEXEL_BYTES = 8;
 const FLOAT_TEXEL_BYTES = 16;
@@ -13,12 +14,6 @@ interface GpuBackend {
 
 export interface TilePoolOptions extends ResidencyOptions {
   uploadBytesPerFrame: number;
-}
-
-function toHalfFloat(pixels: Float32Array): Uint16Array {
-  const half = new Uint16Array(pixels.length);
-  for (let index = 0; index < pixels.length; index++) half[index] = THREE.DataUtils.toHalfFloat(pixels[index]);
-  return half;
 }
 
 function gpuOnlyTarget(renderer: THREE.WebGPURenderer, width: number, height: number, type: THREE.TextureDataType, filter: THREE.MagnificationTextureFilter): THREE.RenderTarget {
@@ -52,7 +47,7 @@ export class TilePool {
   readonly tailSize: number;
   readonly storeBytes: number;
   readonly copyBudget: number;
-  private readonly tileHalves: Uint16Array[];
+  private readonly source: LightmapTileSource;
   private readonly pageTarget: THREE.RenderTarget;
   private readonly sourceSize = uniform(new THREE.Vector2(1, 1));
   uploadedBytesLastFrame = 0;
@@ -62,6 +57,7 @@ export class TilePool {
     readonly pyramids: ChartPyramidSet,
     sourceAtlas: { width: number; height: number },
     private readonly options: TilePoolOptions,
+    source?: LightmapTileSource,
   ) {
     this.sourceSize.value.set(sourceAtlas.width, sourceAtlas.height);
     const tileBytes = pyramids.physicalTile * pyramids.physicalTile * HALF_FLOAT_TEXEL_BYTES;
@@ -73,9 +69,9 @@ export class TilePool {
     this.height = this.size + this.tailSize;
     this.target = gpuOnlyTarget(renderer, this.width, this.height, THREE.HalfFloatType, THREE.LinearFilter);
     this.texture = this.target.texture;
-    this.tileHalves = pyramids.tiles.map((tile) => toHalfFloat(tile.pixels));
-    this.storeBytes = this.tileHalves.length * tileBytes + this.tailSize * this.tailSize * HALF_FLOAT_TEXEL_BYTES;
-    this.write(this.texture, toHalfFloat(pyramids.tailPixels), { x: 0, y: this.size, width: this.tailSize, height: this.tailSize }, HALF_FLOAT_TEXEL_BYTES);
+    this.source = source ?? new MemoryLightmapTileSource(pyramids);
+    this.storeBytes = this.source.storeBytes;
+    this.write(this.texture, this.source.tail, { x: 0, y: this.size, width: this.tailSize, height: this.tailSize }, HALF_FLOAT_TEXEL_BYTES);
     pyramids.releasePixels();
     const rows = this.residency.pageData.length / 4 / PAGE_TABLE_WIDTH;
     this.pageTarget = gpuOnlyTarget(renderer, PAGE_TABLE_WIDTH, rows, THREE.FloatType, THREE.NearestFilter);
@@ -89,8 +85,9 @@ export class TilePool {
     for (const { key, slot } of copies) {
       const slotX = (slot % this.options.slotsPerSide) * side;
       const slotY = Math.floor(slot / this.options.slotsPerSide) * side;
-      this.write(this.texture, this.tileHalves[key], { x: slotX, y: slotY, width: side, height: side }, HALF_FLOAT_TEXEL_BYTES);
-      bytes += this.tileHalves[key].byteLength;
+      const tile = this.source.tile(key);
+      this.write(this.texture, tile, { x: slotX, y: slotY, width: side, height: side }, HALF_FLOAT_TEXEL_BYTES);
+      bytes += tile.byteLength;
     }
     bytes += this.uploadPageTable();
     this.uploadedBytesLastFrame = bytes;
@@ -170,6 +167,7 @@ export class TilePool {
   }
 
   dispose(): void {
+    this.source.dispose();
     this.target.dispose();
     this.pageTarget.dispose();
   }
