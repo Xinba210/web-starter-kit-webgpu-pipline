@@ -15,7 +15,8 @@
     "preview": "vite preview --port 5188",
     "shot": "node scripts/capture-chrome.mjs",
     "test": "vitest run",
-    "check:streaming": "node scripts/check-streaming-assets.mjs"
+    "check:streaming": "node scripts/check-streaming-assets.mjs",
+    "check:streaming:fixture": "node scripts/check-streaming-fixture.mjs"
   },
   "dependencies": {
     "@dgreenheck/ez-tree": "^1.1.0",
