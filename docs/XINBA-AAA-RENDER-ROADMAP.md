@@ -288,7 +288,7 @@ Do not push experimental renderer rewrites directly to `main`.
 
 ## 8. NEXT_MANDATORY
 
-Build the **Pinned Fallback Physical Pool** for chunk-owned XVLM lighting, then connect visible-fragment demand to fine XVLM tile uploads.
+Build the **World Chunk Page Table + TSL Sampling Path** so the pinned XVLM fallback already resident on the GPU becomes a visible baked-light contribution, then connect visible-fragment demand to fine XVLM tile uploads.
 
 The production asset handshake now has a committed Xinba-owned engineering fixture: Active GLB + Proxy GLB + manifest + XVLM + browser/non-browser acceptance gates. It deliberately does not claim final art quality. The first Blender/Hunyuan3D-authored high-quality asset remains mandatory once the authorized Windows tool device is available.
 
