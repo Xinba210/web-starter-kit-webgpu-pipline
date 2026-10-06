@@ -34,6 +34,38 @@ export interface RegisteredChunkLightmap {
   tileCount: number;
 }
 
+export function validateChunkLightmapIndex(index: ChunkLightmapIndex): void {
+  if (!index.revision.trim()) throw new Error('chunk lightmap index has no revision');
+  if (index.charts.length < 1) throw new Error('chunk lightmap index has no charts');
+
+  const covered = new Uint8Array(index.tiles.length);
+  for (const [chart, record] of index.charts.entries()) {
+    if (!Number.isInteger(record.tailLevel) || record.tailLevel < 0) throw new Error(`chart ${chart} has invalid tailLevel`);
+    if (!Number.isInteger(record.tileStart) || record.tileStart < 0) throw new Error(`chart ${chart} has invalid tileStart`);
+    if (!Number.isInteger(record.tileCount) || record.tileCount < 0) throw new Error(`chart ${chart} has invalid tileCount`);
+    if (record.tileStart + record.tileCount > index.tiles.length) throw new Error(`chart ${chart} tile range exceeds tile index`);
+
+    for (let tile = record.tileStart; tile < record.tileStart + record.tileCount; tile++) {
+      if (covered[tile]) throw new Error(`tile ${tile} belongs to overlapping chart ranges`);
+      covered[tile] = 1;
+      if (index.tiles[tile].chart !== chart) throw new Error(`tile ${tile} is indexed by chart ${chart} but declares chart ${index.tiles[tile].chart}`);
+    }
+  }
+
+  for (const [tile, record] of index.tiles.entries()) {
+    if (!covered[tile]) throw new Error(`tile ${tile} is not owned by a chart range`);
+    if (!Number.isInteger(record.chart) || record.chart < 0 || record.chart >= index.charts.length) throw new Error(`tile ${tile} has invalid chart`);
+    if (!Number.isInteger(record.level) || record.level < 0 || record.level > 255) throw new Error(`tile ${tile} has invalid level`);
+    if (!Number.isInteger(record.tileX) || record.tileX < 0 || record.tileX > 65535) throw new Error(`tile ${tile} has invalid tileX`);
+    if (!Number.isInteger(record.tileY) || record.tileY < 0 || record.tileY > 65535) throw new Error(`tile ${tile} has invalid tileY`);
+    if (record.parent === null) continue;
+    if (!Number.isInteger(record.parent) || record.parent < 0 || record.parent >= index.tiles.length) throw new Error(`tile ${tile} has invalid parent`);
+    const parent = index.tiles[record.parent];
+    if (parent.chart !== record.chart) throw new Error(`tile ${tile} parent crosses chart ownership`);
+    if (parent.level <= record.level) throw new Error(`tile ${tile} parent is not coarser`);
+  }
+}
+
 export class WorldLightmapRegistry {
   readonly chartSlots: ChartNamespace;
   readonly tileSlots: ChartNamespace;
@@ -63,7 +95,7 @@ export class WorldLightmapRegistry {
   register(owner: string, index: ChunkLightmapIndex): RegisteredChunkLightmap {
     if (!index.revision.trim()) throw new Error(`chunk lightmap ${owner} has no revision`);
     if (index.charts.length < 1) throw new Error(`chunk lightmap ${owner} has no charts`);
-    this.validate(index);
+    validateChunkLightmapIndex(index);
 
     const existing = this.chunks.get(owner);
     if (existing) {
@@ -167,20 +199,5 @@ export class WorldLightmapRegistry {
     return chunk;
   }
 
-  private validate(index: ChunkLightmapIndex): void {
-    for (const [chart, record] of index.charts.entries()) {
-      if (!Number.isInteger(record.tailLevel) || record.tailLevel < 0) throw new Error(`chart ${chart} has invalid tailLevel`);
-      if (!Number.isInteger(record.tileStart) || record.tileStart < 0) throw new Error(`chart ${chart} has invalid tileStart`);
-      if (!Number.isInteger(record.tileCount) || record.tileCount < 0) throw new Error(`chart ${chart} has invalid tileCount`);
-      if (record.tileStart + record.tileCount > index.tiles.length) throw new Error(`chart ${chart} tile range exceeds tile index`);
-    }
 
-    for (const [tile, record] of index.tiles.entries()) {
-      if (!Number.isInteger(record.chart) || record.chart < 0 || record.chart >= index.charts.length) throw new Error(`tile ${tile} has invalid chart`);
-      if (!Number.isInteger(record.level) || record.level < 0 || record.level > 255) throw new Error(`tile ${tile} has invalid level`);
-      if (!Number.isInteger(record.tileX) || record.tileX < 0 || record.tileX > 65535) throw new Error(`tile ${tile} has invalid tileX`);
-      if (!Number.isInteger(record.tileY) || record.tileY < 0 || record.tileY > 65535) throw new Error(`tile ${tile} has invalid tileY`);
-      if (record.parent !== null && (!Number.isInteger(record.parent) || record.parent < 0 || record.parent >= index.tiles.length)) throw new Error(`tile ${tile} has invalid parent`);
-    }
-  }
 }
