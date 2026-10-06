@@ -15,6 +15,13 @@ interface XvlmTileRecord extends ChunkTileIndexRecord {
   byteLength: number;
 }
 
+export interface ChunkFallbackRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 interface XvlmMetadata {
   revision: string;
   metresPerTexel: number;
@@ -25,6 +32,7 @@ interface XvlmMetadata {
   fallbackByteOffset: number;
   fallbackByteLength: number;
   charts: ChunkChartIndexRecord[];
+  fallbackCharts?: ChunkFallbackRect[];
   tiles: XvlmTileRecord[];
 }
 
@@ -37,6 +45,7 @@ export interface ChunkLightmapPackageInput {
   fallbackHeight: number;
   fallback: Uint16Array;
   charts: ChunkChartIndexRecord[];
+  fallbackCharts?: ChunkFallbackRect[];
   tiles: Array<ChunkTileIndexRecord & { pixels: Uint16Array }>;
 }
 
@@ -48,6 +57,7 @@ export interface DecodedChunkLightmapPackage {
   readonly fallbackWidth: number;
   readonly fallbackHeight: number;
   readonly fallback: Uint16Array;
+  readonly fallbackCharts: ChunkFallbackRect[];
   readonly index: ChunkLightmapIndex;
   readonly storeBytes: number;
   tile(localTile: number): Uint16Array;
@@ -74,6 +84,23 @@ function validateInput(input: ChunkLightmapPackageInput): void {
   if (!Number.isInteger(input.fallbackHeight) || input.fallbackHeight < 1) throw new Error('XVLM fallbackHeight must be positive');
   if (input.fallback.length !== input.fallbackWidth * input.fallbackHeight * 4) throw new Error('XVLM fallback size does not match dimensions');
   if (input.charts.length < 1) throw new Error('XVLM needs at least one chart');
+
+  const fallbackCharts = input.fallbackCharts ?? (
+    input.charts.length === 1
+      ? [{ x: 0, y: 0, width: input.fallbackWidth, height: input.fallbackHeight }]
+      : []
+  );
+  if (fallbackCharts.length !== input.charts.length) throw new Error('XVLM fallback chart count must match chart count');
+  for (const [chart, rect] of fallbackCharts.entries()) {
+    if (!Number.isInteger(rect.x) || !Number.isInteger(rect.y) || !Number.isInteger(rect.width) || !Number.isInteger(rect.height)) {
+      throw new Error(`XVLM fallback chart ${chart} has non-integer bounds`);
+    }
+    if (rect.x < 0 || rect.y < 0 || rect.width < 1 || rect.height < 1) throw new Error(`XVLM fallback chart ${chart} has invalid bounds`);
+    if (rect.x + rect.width > input.fallbackWidth || rect.y + rect.height > input.fallbackHeight) {
+      throw new Error(`XVLM fallback chart ${chart} exceeds fallback image`);
+    }
+    if (rect.width > input.tileSize || rect.height > input.tileSize) throw new Error(`XVLM fallback chart ${chart} exceeds tileSize`);
+  }
 
   const physicalTile = input.tileSize + input.border * 2;
   const expectedTileWords = physicalTile * physicalTile * 4;
@@ -127,6 +154,7 @@ export async function encodeChunkLightmapPackage(input: ChunkLightmapPackageInpu
     fallbackByteOffset: 0,
     fallbackByteLength: fallbackBytes.byteLength,
     charts: input.charts,
+    fallbackCharts: input.fallbackCharts ?? [{ x: 0, y: 0, width: input.fallbackWidth, height: input.fallbackHeight }],
     tiles: tileRecords,
   };
 
@@ -184,6 +212,22 @@ export async function decodeChunkLightmapPackage(buffer: ArrayBuffer): Promise<D
   if (!Number.isInteger(metadata.fallbackHeight) || metadata.fallbackHeight < 1) throw new Error('XVLM metadata has invalid fallbackHeight');
   if (!Array.isArray(metadata.charts) || metadata.charts.length < 1) throw new Error('XVLM metadata has no charts');
   if (!Array.isArray(metadata.tiles)) throw new Error('XVLM metadata has no tile index');
+  const fallbackCharts = metadata.fallbackCharts ?? (
+    metadata.charts.length === 1
+      ? [{ x: 0, y: 0, width: metadata.fallbackWidth, height: metadata.fallbackHeight }]
+      : []
+  );
+  if (fallbackCharts.length !== metadata.charts.length) throw new Error('XVLM metadata fallback chart count mismatch');
+  for (const [chart, rect] of fallbackCharts.entries()) {
+    if (!Number.isInteger(rect.x) || !Number.isInteger(rect.y) || !Number.isInteger(rect.width) || !Number.isInteger(rect.height)) {
+      throw new Error(`XVLM fallback chart ${chart} has non-integer bounds`);
+    }
+    if (rect.x < 0 || rect.y < 0 || rect.width < 1 || rect.height < 1) throw new Error(`XVLM fallback chart ${chart} has invalid bounds`);
+    if (rect.x + rect.width > metadata.fallbackWidth || rect.y + rect.height > metadata.fallbackHeight) {
+      throw new Error(`XVLM fallback chart ${chart} exceeds fallback image`);
+    }
+    if (rect.width > metadata.tileSize || rect.height > metadata.tileSize) throw new Error(`XVLM fallback chart ${chart} exceeds tileSize`);
+  }
 
   const fallbackWords = metadata.fallbackWidth * metadata.fallbackHeight * 4;
   if (
@@ -230,6 +274,7 @@ export async function decodeChunkLightmapPackage(buffer: ArrayBuffer): Promise<D
     fallbackWidth: metadata.fallbackWidth,
     fallbackHeight: metadata.fallbackHeight,
     fallback,
+    fallbackCharts,
     index,
     storeBytes: payloadLength,
     tile(localTile: number): Uint16Array {
