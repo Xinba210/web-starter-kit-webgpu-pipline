@@ -11,6 +11,7 @@ export { ChartPyramidSet } from './chartPyramids.ts';
 export { TileResidency } from './tileResidency.ts';
 export { TilePool } from './tilePool.ts';
 export { DemandFeedback } from './feedback.ts';
+export { MemoryLightmapTileSource, expectedTileBytes, floatPixelsToHalf, type LightmapTileSource } from './tileSource.ts';
 
 export interface LodSettings {
   tileSize: number;
