@@ -22,6 +22,13 @@ export {
   type RegisteredChunkLightmap,
   type WorldTileHandle,
 } from './worldLightmapRegistry.ts';
+export {
+  decodeChunkLightmapPackage,
+  encodeChunkLightmapPackage,
+  loadChunkLightmapPackage,
+  type ChunkLightmapPackageInput,
+  type DecodedChunkLightmapPackage,
+} from './chunkLightmapPackage.ts';
 
 export interface LodSettings {
   tileSize: number;
