@@ -194,20 +194,31 @@ Until cached reflection sources can rebind after dynamic membership changes, str
 - `MemoryLightmapTileSource`
 - reusable `ChartNamespace`
 - repeatable local-to-global `lightmapChart` remapping
-- `ChunkLightingRuntime` allocation lifecycle
+- fixed-capacity `WorldLightmapRegistry`
+- generation-tagged chart/tile ownership
+- stale-handle rejection after range reuse
+- zero fine-tile cost for tail-only chunks
+- strict chart/tile/parent hierarchy validation
+- `ChunkLightingRuntime` async activation lifecycle
+- XVLM package cancellation, identity validation and registry rollback
+- versioned `XVLM` encoder/decoder with SHA-256 integrity
+- committed tail-only XVLM transport fixture
 - chunk lighting metadata in `StreamedAssetManifest`
+- `__streaming` lighting residency diagnostics
 
 ## NEXT_MANDATORY
 
-Implement the fixed-capacity global chunk chart/page-table registry.
+Implement the **Pinned Fallback Physical Pool**.
 
 It must:
 
-1. reserve chart records without resizing GPU resources
-2. register/unregister chart metadata by chunk generation
-3. invalidate retired tile entries
-4. keep the existing scene-global lightmap path working unchanged
-5. expose resident chart/tile counts through `__streaming`
-6. have unit tests proving a retired chunk cannot poison a later allocation
+1. reserve physical fallback capacity before a chunk is marked baked-light ready
+2. upload each active chart's coarsest guaranteed representation into bounded GPU storage
+3. never evict a fallback while its chart is active
+4. allow fine tiles to compete only for the remaining physical slots
+5. reject stale generation-tagged uploads after chunk retirement
+6. release every pinned slot when the chunk demotes to Proxy or unloads
+7. expose pinned/fine slot counts and uploaded KiB through `__streaming`
+8. preserve the existing scene-global `LightmapLod` path unchanged
 
-After that, implement the first `XVLM` package reader and coarsest-fallback upload.
+After the fallback pool is live, connect visible-fragment demand to XVLM fine-tile uploads and then replace the engineering fixture with the first Blender/Hunyuan3D-authored production-quality asset.
