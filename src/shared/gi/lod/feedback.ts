@@ -21,7 +21,6 @@ export type TileResolver = (chart: number, level: number, atlasX: number, atlasY
  */
 export class DemandFeedback {
   requests = new Set<number>();
-  /** Screen-space demand weight per tile. Larger visible coverage wins under a tight pool/upload budget. */
   priorities = new Map<number, number>();
   private readonly target: THREE.RenderTarget;
   private readonly material: THREE.NodeMaterial;
