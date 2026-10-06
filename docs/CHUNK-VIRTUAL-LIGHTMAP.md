@@ -205,20 +205,29 @@ Until cached reflection sources can rebind after dynamic membership changes, str
 - committed tail-only XVLM transport fixture
 - chunk lighting metadata in `StreamedAssetManifest`
 - `__streaming` lighting residency diagnostics
+- per-chart XVLM fallback rectangles with bordered physical-tile extraction
+- generation-safe `PinnedFallbackResidency`
+- bounded half-float `PinnedFallbackPool`
+- actual WebGPU `queue.writeTexture` upload of Active chart fallbacks
+- fallback slots released on Proxy/Unload
+- Browser Gate assertions for pinned count and upload bytes
+- activation rollback restores local chart ids if fallback registration/upload fails
+
+The pinned fallback pool is transport/residency infrastructure. The current frame shader does not yet sample this world pool, so this checkpoint does not claim that the XVLM fallback visibly contributes baked light.
 
 ## NEXT_MANDATORY
 
-Implement the **Pinned Fallback Physical Pool**.
+Implement the **World Chunk Page Table + TSL Sampling Path**.
 
 It must:
 
-1. reserve physical fallback capacity before a chunk is marked baked-light ready
-2. upload each active chart's coarsest guaranteed representation into bounded GPU storage
-3. never evict a fallback while its chart is active
-4. allow fine tiles to compete only for the remaining physical slots
-5. reject stale generation-tagged uploads after chunk retirement
-6. release every pinned slot when the chunk demotes to Proxy or unloads
-7. expose pinned/fine slot counts and uploaded KiB through `__streaming`
-8. preserve the existing scene-global `LightmapLod` path unchanged
+1. create a fixed-capacity GPU chart/page table for streamed chunks
+2. publish each Active chart's pinned fallback slot and fallback dimensions
+3. let one TSL lightmap sampler resolve global `lightmapChart` ids into the world pool
+4. enable baked-light receiver state only after the fallback table entry is valid
+5. fall back to probes while XVLM is loading or failed
+6. invalidate page-table entries by generation on Proxy/Unload
+7. keep the existing scene-global `LightmapLod` sampler operational during migration
+8. extend the Browser Gate to prove the streamed baked term is non-zero and disappears cleanly after demotion
 
-After the fallback pool is live, connect visible-fragment demand to XVLM fine-tile uploads and then replace the engineering fixture with the first Blender/Hunyuan3D-authored production-quality asset.
+After the fallback sampling path is visible, connect camera feedback to XVLM fine-tile requests, let fine pages compete for non-pinned physical slots, and then replace the engineering fixture with the first Blender/Hunyuan3D-authored production-quality asset.
