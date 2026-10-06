@@ -192,9 +192,20 @@ Acceptance:
 - old callers without weights retain valid behavior
 
 ### P2 — Camera-centered world chunk streamer
-Next major checkpoint
+Status: foundation implemented; production GI/asset lifecycle integration next
 
-Build a reusable chunk streaming service with:
+Implemented:
+- reusable `CameraChunkStreamer`
+- active and prefetch rings
+- direction-aware look-ahead
+- unload hysteresis
+- per-update load/unload budgets
+- obsolete async-load cancellation
+- deterministic chunk coordinates and ids
+- controlled `lod-scale?chunks=1` visualization with `__chunks` diagnostics
+- unit coverage for look-ahead, budget priority, hysteresis and cancellation
+
+Build toward:
 - camera cell
 - high-fidelity ring
 - prefetch ring
@@ -270,4 +281,6 @@ Do not push experimental renderer rewrites directly to `main`.
 
 ## 8. NEXT_MANDATORY
 
-Implement **P2 Camera-centered world chunk streamer** as a reusable module, then integrate it first into one controlled world scene before expanding to the full game.
+Integrate the P2 chunk lifecycle with **production geometry + GI ownership**: define streamed static/dynamic asset manifests, safe BVH/lightmap/probe lifecycle boundaries, and a one-scene acceptance gate where chunks can enter and leave without stale lighting or whole-world rebuilds.
+
+Commercialization must also follow `docs/COPYRIGHT-AND-LICENSE-AUDIT.md`; new Xinba-owned modules should stay separable from inherited upstream implementation.
