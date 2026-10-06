@@ -192,7 +192,7 @@ Acceptance:
 - old callers without weights retain valid behavior
 
 ### P2 — Camera-centered world chunk streamer
-Status: foundation implemented; production GI/asset lifecycle integration next
+Status: production geometry/GI ownership foundation implemented
 
 Implemented:
 - reusable `CameraChunkStreamer`
@@ -202,8 +202,15 @@ Implemented:
 - per-update load/unload budgets
 - obsolete async-load cancellation
 - deterministic chunk coordinates and ids
-- controlled `lod-scale?chunks=1` visualization with `__chunks` diagnostics
-- unit coverage for look-ahead, budget priority, hysteresis and cancellation
+- `StreamedSceneRuntime` Active/Proxy ownership
+- Active chunks synchronized through the dynamic BVH without rebuilding the static BVH
+- Proxy chunks excluded from GI and shadows
+- one membership synchronization per frame after chunk changes
+- safe live-reflection fallback while cached reflections cannot rebind dynamic BVH sources
+- provenance-aware `StreamedAssetManifest`
+- cancellable GLB provider with Active/Proxy loading and GPU resource disposal
+- controlled `lod-scale?chunks=1` visualization with `__chunks` / `__streaming` diagnostics
+- unit coverage for look-ahead, budget priority, hysteresis, cancellation, scene ownership and provenance gates
 
 Build toward:
 - camera cell
@@ -281,6 +288,8 @@ Do not push experimental renderer rewrites directly to `main`.
 
 ## 8. NEXT_MANDATORY
 
-Integrate the P2 chunk lifecycle with **production geometry + GI ownership**: define streamed static/dynamic asset manifests, safe BVH/lightmap/probe lifecycle boundaries, and a one-scene acceptance gate where chunks can enter and leave without stale lighting or whole-world rebuilds.
+Complete the **Blender/Hunyuan3D -> Active GLB + Proxy GLB -> manifest -> Three.js** handshake with one Xinba-owned asset pair, then run a headed WebGPU acceptance pass that records Active/Proxy transitions, dynamic-BVH membership, triangle/memory cost and unload cleanup.
 
-Commercialization must also follow `docs/COPYRIGHT-AND-LICENSE-AUDIT.md`; new Xinba-owned modules should stay separable from inherited upstream implementation.
+After that, add chunk-owned baked-lighting transport so streamed architecture can reach baked-static visual quality without forcing a whole-world lightmap/BVH rebuild.
+
+Commercialization must follow `docs/COPYRIGHT-AND-LICENSE-AUDIT.md`; new Xinba-owned modules stay separable from inherited upstream implementation.
