@@ -285,6 +285,30 @@ export async function decodeChunkLightmapPackage(buffer: ArrayBuffer): Promise<D
   };
 }
 
+export function extractChunkFallbackTile(packageValue: DecodedChunkLightmapPackage, localChart: number): Uint16Array {
+  const rect = packageValue.fallbackCharts[localChart];
+  if (!rect) throw new Error(`XVLM has no fallback chart ${localChart}`);
+  const physical = packageValue.tileSize + packageValue.border * 2;
+  const output = new Uint16Array(physical * physical * 4);
+
+  for (let y = 0; y < physical; y++) {
+    const localY = Math.min(rect.height - 1, Math.max(0, y - packageValue.border));
+    const sourceY = rect.y + localY;
+    for (let x = 0; x < physical; x++) {
+      const localX = Math.min(rect.width - 1, Math.max(0, x - packageValue.border));
+      const sourceX = rect.x + localX;
+      const from = (sourceY * packageValue.fallbackWidth + sourceX) * 4;
+      const to = (y * physical + x) * 4;
+      output[to] = packageValue.fallback[from];
+      output[to + 1] = packageValue.fallback[from + 1];
+      output[to + 2] = packageValue.fallback[from + 2];
+      output[to + 3] = packageValue.fallback[from + 3];
+    }
+  }
+
+  return output;
+}
+
 export async function loadChunkLightmapPackage(url: string, signal?: AbortSignal): Promise<DecodedChunkLightmapPackage> {
   const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`XVLM load failed ${url}: HTTP ${response.status}`);
