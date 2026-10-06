@@ -84,7 +84,7 @@ describe('WorldLightmapRegistry', () => {
       tiles: [],
     });
     expect(registered.tileCount).toBe(0);
-    expect(registry.snapshot()).toMatchObject({ chunks: 1, chartsUsed: 1, tilesUsed: 1 });
+    expect(registry.snapshot()).toMatchObject({ chunks: 1, chartsUsed: 1, tilesUsed: 0 });
     expect(() => registry.tileHandle('tail-only', 0)).toThrow(/outside/);
   });
 
