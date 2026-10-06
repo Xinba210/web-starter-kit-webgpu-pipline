@@ -22,9 +22,17 @@ export interface StreamedAssetSpec {
   provenance: StreamedAssetProvenance;
 }
 
+export interface StreamedChunkLightingSpec {
+  packageUrl: string;
+  chartCount: number;
+  revision: string;
+  metresPerTexel: number;
+}
+
 export interface StreamedChunkSpec {
   coord: ChunkCoordinate;
   assets: StreamedAssetSpec[];
+  lighting?: StreamedChunkLightingSpec;
 }
 
 export interface StreamedAssetManifest {
@@ -49,6 +57,13 @@ export function validateStreamedAssetManifest(
     const id = chunkId(chunk.coord.x, chunk.coord.z);
     if (chunkIds.has(id)) throw new Error(`duplicate streamed chunk ${id}`);
     chunkIds.add(id);
+
+    if (chunk.lighting) {
+      if (!chunk.lighting.packageUrl.trim()) throw new Error(`streamed chunk ${id} lighting has no packageUrl`);
+      if (!Number.isInteger(chunk.lighting.chartCount) || chunk.lighting.chartCount < 1) throw new Error(`streamed chunk ${id} lighting chartCount must be a positive integer`);
+      if (!chunk.lighting.revision.trim()) throw new Error(`streamed chunk ${id} lighting has no revision`);
+      if (!Number.isFinite(chunk.lighting.metresPerTexel) || chunk.lighting.metresPerTexel <= 0) throw new Error(`streamed chunk ${id} lighting metresPerTexel must be positive`);
+    }
 
     for (const asset of chunk.assets) {
       if (!asset.id.trim()) throw new Error(`streamed asset in chunk ${id} has no id`);
