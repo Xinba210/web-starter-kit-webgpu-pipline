@@ -3,7 +3,7 @@ import * as THREE from 'three/webgpu';
 import { color as tslColor } from 'three/tsl';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createScene } from '../../shared/gi/surfel/scene.ts';
-import { Layer } from '../../shared/world/index.ts';
+import { CameraChunkStreamer, Layer, chunkWorldOrigin, type ChunkTier } from '../../shared/world/index.ts';
 import { createFiberSceneRoot, StaticGroup } from '../../shared/fiber/index.ts';
 import { bootStage } from '../../shared/ui/bootProgress.ts';
 
@@ -132,6 +132,95 @@ function LongWall() {
  * (`lightmap={false}`): they are occluders, and thousands of thin charts would only fill
  * the tail.
  */
+function createChunkStreamLab(scene: THREE.Scene, camera: THREE.PerspectiveCamera) {
+  const params = new URLSearchParams(location.search);
+  if (params.get('chunks') !== '1') return null;
+
+  const cellSize = Number(params.get('chunkSize') ?? '18');
+  const root = new THREE.Group();
+  root.name = 'chunk-stream-lab';
+  root.layers.set(Layer.Debug);
+  scene.add(root);
+
+  const platformGeometry = new THREE.BoxGeometry(cellSize * 0.92, 0.12, cellSize * 0.92);
+  const markerGeometry = new THREE.BoxGeometry(1.2, 1, 1.2);
+  const activeMaterial = new THREE.MeshBasicMaterial({ color: 0xd7c69a });
+  const prefetchMaterial = new THREE.MeshBasicMaterial({ color: 0x76806a });
+  const forward = new THREE.Vector3();
+
+  const applyTier = (group: THREE.Group, tier: ChunkTier) => {
+    const material = tier === 'active' ? activeMaterial : prefetchMaterial;
+    group.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (mesh.isMesh) mesh.material = material;
+    });
+  };
+
+  const streamer = new CameraChunkStreamer<THREE.Group>({
+    load(coord, tier) {
+      const origin = chunkWorldOrigin(coord, cellSize);
+      const group = new THREE.Group();
+      group.name = `stream-chunk-${coord.x}-${coord.z}`;
+      group.position.set(origin.x, -0.45, origin.z);
+      group.userData.giExclude = true;
+      const platform = new THREE.Mesh(platformGeometry, prefetchMaterial);
+      platform.name = `${group.name}-platform`;
+      group.add(platform);
+      const height = 1.5 + ((Math.abs(coord.x * 17 + coord.z * 31) % 5) * 0.65);
+      const markerMesh = new THREE.Mesh(markerGeometry, prefetchMaterial);
+      markerMesh.name = `${group.name}-marker`;
+      markerMesh.scale.y = height;
+      markerMesh.position.y = height * 0.5 + 0.06;
+      group.add(markerMesh);
+      group.traverse((object) => {
+        object.layers.set(Layer.Debug);
+        object.userData.giExclude = true;
+        const mesh = object as THREE.Mesh;
+        if (mesh.isMesh) {
+          mesh.castShadow = false;
+          mesh.receiveShadow = false;
+        }
+      });
+      applyTier(group, tier);
+      root.add(group);
+      return group;
+    },
+    unload(group) {
+      root.remove(group);
+    },
+    setTier(group, tier) {
+      applyTier(group, tier);
+    },
+  }, {
+    cellSize,
+    activeRadius: Number(params.get('chunkActive') ?? '1.35'),
+    prefetchRadius: Number(params.get('chunkPrefetch') ?? '3.1'),
+    unloadRadius: Number(params.get('chunkUnload') ?? '4.5'),
+    lookAheadCells: Number(params.get('chunkLookAhead') ?? '1.75'),
+    maxLoadsPerUpdate: Number(params.get('chunkLoads') ?? '4'),
+    maxUnloadsPerUpdate: Number(params.get('chunkUnloads') ?? '6'),
+  });
+
+  const update = () => {
+    camera.getWorldDirection(forward);
+    return streamer.update({
+      x: camera.position.x,
+      z: camera.position.z,
+      forwardX: forward.x,
+      forwardZ: forward.z,
+    });
+  };
+
+  update();
+  (window as unknown as Record<string, unknown>).__chunks = {
+    snapshot: () => streamer.snapshot(),
+    resident: () => streamer.residentIds(),
+    update,
+  };
+
+  return { streamer, update };
+}
+
 export async function createLodScaleScene(renderer: THREE.WebGPURenderer): Promise<LodScaleScene> {
   const { scene, camera, controls, dirLight: sun } = createScene(renderer);
   scene.name = 'lod-scale';
@@ -168,6 +257,16 @@ export async function createLodScaleScene(renderer: THREE.WebGPURenderer): Promi
     </group>,
   ));
   window.addEventListener('resize', () => fiber.resize(renderer.domElement.clientWidth, renderer.domElement.clientHeight));
+  const chunkStream = createChunkStreamLab(scene, camera);
 
-  return { scene, camera, controls, sun, update(t) { fiber.advance(t); } };
+  return {
+    scene,
+    camera,
+    controls,
+    sun,
+    update(t) {
+      fiber.advance(t);
+      chunkStream?.update();
+    },
+  };
 }
