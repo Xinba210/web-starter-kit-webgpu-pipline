@@ -35,6 +35,7 @@ export class DemandFeedback {
   drawnLastRead = 0;
   levelsLastRead: Record<number, number> = {};
   onTailLastRead = 0;
+  maxPriorityLastRead = 0;
 
   constructor(
     private readonly renderer: THREE.WebGPURenderer,
@@ -99,6 +100,7 @@ export class DemandFeedback {
       const priorities = new Map<number, number>();
       let drawn = 0;
       let onTail = 0;
+      let maxPriority = 0;
       const levels: Record<number, number> = {};
       for (let pixel = 0; pixel < raw.length; pixel += 4) {
         const packed = Math.round(raw[pixel]);
@@ -111,7 +113,9 @@ export class DemandFeedback {
         if (key === null) onTail++;
         else {
           fresh.add(key);
-          priorities.set(key, (priorities.get(key) ?? 0) + 1);
+          const weight = (priorities.get(key) ?? 0) + 1;
+          priorities.set(key, weight);
+          maxPriority = Math.max(maxPriority, weight);
         }
       }
       this.requests = fresh;
@@ -119,6 +123,7 @@ export class DemandFeedback {
       this.drawnLastRead = drawn;
       this.levelsLastRead = levels;
       this.onTailLastRead = onTail;
+      this.maxPriorityLastRead = maxPriority;
       this.readsDone++;
     } catch (error) {
       console.warn(`[lod] demand readback failed: ${error}`);
