@@ -1,7 +1,7 @@
 import type * as THREE from 'three/webgpu';
 import type { StreamedChunkLightingSpec } from '../../world/assetManifest.ts';
 import type { StreamedChunkLightingController } from '../../world/streamedScene.ts';
-import { remapLightmapCharts } from './chartNamespace.ts';
+import { remapLightmapCharts, restoreLocalLightmapCharts } from './chartNamespace.ts';
 import {
   loadChunkLightmapPackage,
   type DecodedChunkLightmapPackage,
@@ -165,6 +165,7 @@ export class ChunkLightingRuntime implements StreamedChunkLightingController {
     } catch (error) {
       if (!this.isCurrent(entry) || entry.controller.signal.aborted) return;
       this.fallbackPool?.release(entry.owner);
+      restoreLocalLightmapCharts(entry.root);
       if (entry.registered) {
         this.registry.unregister(entry.owner);
         entry.registered = undefined;
