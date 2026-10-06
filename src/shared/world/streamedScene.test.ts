@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Mobility } from './mobility.ts';
-import { StreamedSceneRuntime, type StreamedChunkProvider } from './streamedScene.ts';
+import { StreamedSceneRuntime, type StreamedChunkPackage, type StreamedChunkProvider } from './streamedScene.ts';
 
 function provider(disposed: string[] = []): StreamedChunkProvider {
   return {
@@ -106,7 +106,7 @@ describe('StreamedSceneRuntime', () => {
   it('disposes a cancelled late load without attaching it to the scene', async () => {
     const scene = new THREE.Scene();
     const disposed: string[] = [];
-    let resolveFirst: ((value: ReturnType<StreamedChunkProvider['load']> extends Promise<infer U> ? U : never) => void) | undefined;
+    let resolveFirst: ((value: StreamedChunkPackage) => void) | undefined;
     let first = true;
     const base = provider(disposed);
     const runtime = new StreamedSceneRuntime(scene, {
