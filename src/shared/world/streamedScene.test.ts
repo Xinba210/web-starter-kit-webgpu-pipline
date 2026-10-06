@@ -103,6 +103,30 @@ describe('StreamedSceneRuntime', () => {
     expect(runtime.consumeChanges().dynamicMembershipChanged).toBe(true);
   });
 
+  it('does not request a dynamic BVH sync for an empty streamed chunk', async () => {
+    const scene = new THREE.Scene();
+    const runtime = new StreamedSceneRuntime(scene, {
+      load() {
+        return { activeRoot: new THREE.Group(), materialsChanged: false };
+      },
+    }, {
+      cellSize: 10,
+      activeRadius: 0.1,
+      prefetchRadius: 0.1,
+      unloadRadius: 2,
+      lookAheadCells: 0,
+      maxLoadsPerUpdate: 1,
+    });
+
+    runtime.updateSample({ x: 1, z: 1, forwardX: 1, forwardZ: 0 });
+    await settle();
+
+    expect(runtime.consumeChanges()).toMatchObject({
+      dynamicMembershipChanged: false,
+      materialsChanged: false,
+    });
+  });
+
   it('disposes a cancelled late load without attaching it to the scene', async () => {
     const scene = new THREE.Scene();
     const disposed: string[] = [];
