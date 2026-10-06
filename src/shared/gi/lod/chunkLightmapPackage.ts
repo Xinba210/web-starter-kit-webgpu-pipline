@@ -3,6 +3,7 @@ import type {
   ChunkLightmapIndex,
   ChunkTileIndexRecord,
 } from './worldLightmapRegistry.ts';
+import { validateChunkLightmapIndex } from './worldLightmapRegistry.ts';
 
 const XVLM_MAGIC = 0x4d4c5658;
 const XVLM_VERSION = 1;
@@ -211,6 +212,7 @@ export async function decodeChunkLightmapPackage(buffer: ArrayBuffer): Promise<D
       parent: record.parent,
     })),
   };
+  validateChunkLightmapIndex(index);
 
   return {
     revision: metadata.revision,
