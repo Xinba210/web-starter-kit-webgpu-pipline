@@ -203,7 +203,13 @@ export async function decodeChunkLightmapPackage(buffer: ArrayBuffer): Promise<D
   const index: ChunkLightmapIndex = {
     revision: metadata.revision,
     charts: metadata.charts,
-    tiles: metadata.tiles.map(({ byteOffset: _byteOffset, byteLength: _byteLength, ...record }) => record),
+    tiles: metadata.tiles.map((record) => ({
+      chart: record.chart,
+      level: record.level,
+      tileX: record.tileX,
+      tileY: record.tileY,
+      parent: record.parent,
+    })),
   };
 
   return {
