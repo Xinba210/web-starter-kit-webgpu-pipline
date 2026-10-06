@@ -147,6 +147,22 @@ describe('ChunkLightingRuntime', () => {
     expect(runtime.registry.snapshot()).toMatchObject({ chunks: 0, chartsUsed: 0, tilesUsed: 0 });
   });
 
+  it('rolls registry ownership back when GLB chart ids exceed the XVLM chart count', async () => {
+    const badRoot = rootWithCharts();
+    const runtime = new ChunkLightingRuntime(8, 8, async () => packageValue('one-chart', 1));
+    runtime.activate('bad', badRoot, {
+      ...spec,
+      revision: 'one-chart',
+      chartCount: 1,
+    });
+    await settle();
+
+    expect(runtime.get('bad')?.state).toBe('failed');
+    expect(runtime.get('bad')?.error).toMatch(/exceeds chunk chart count/);
+    expect(runtime.registry.snapshot()).toMatchObject({ chunks: 0, chartsUsed: 0, tilesUsed: 0 });
+    expect(runtime.snapshot()).toMatchObject({ packageTileSize: null, packageBorder: null });
+  });
+
   it('enforces one physical tile shape across active chunk packages', async () => {
     const runtime = new ChunkLightingRuntime(8, 8, async (url) => (
       url.includes('different') ? packageValue('different', 2, 0.05, 32, 2) : packageValue()
