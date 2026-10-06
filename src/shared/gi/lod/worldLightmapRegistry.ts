@@ -20,6 +20,11 @@ export interface ChunkLightmapIndex {
   tiles: ChunkTileIndexRecord[];
 }
 
+export interface WorldChartHandle {
+  slot: number;
+  generation: number;
+}
+
 export interface WorldTileHandle {
   slot: number;
   generation: number;
@@ -163,6 +168,16 @@ export class WorldLightmapRegistry {
     const chunk = this.require(owner);
     if (localChart < 0 || localChart >= chunk.charts.count) throw new Error(`local chart ${localChart} is outside ${owner}`);
     return chunk.charts.base + localChart;
+  }
+
+  chartHandle(owner: string, localChart: number): WorldChartHandle {
+    const chunk = this.require(owner);
+    if (localChart < 0 || localChart >= chunk.charts.count) throw new Error(`local chart ${localChart} is outside ${owner}`);
+    return { slot: chunk.charts.base + localChart, generation: chunk.generation };
+  }
+
+  isCurrentChart(handle: WorldChartHandle): boolean {
+    return handle.slot >= 0 && handle.slot < this.chartGeneration.length && this.chartGeneration[handle.slot] === handle.generation;
   }
 
   tileHandle(owner: string, localTile: number): WorldTileHandle {
