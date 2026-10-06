@@ -65,7 +65,7 @@ const DEFAULT_SETTINGS: ChunkStreamerSettings = {
   maxUnloadsPerUpdate: 4,
 };
 
-function chunkId(x: number, z: number): string {
+export function chunkId(x: number, z: number): string {
   return `${x}:${z}`;
 }
 
