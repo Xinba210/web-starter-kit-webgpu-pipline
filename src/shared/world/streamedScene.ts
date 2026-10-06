@@ -127,17 +127,24 @@ export class StreamedSceneRuntime {
   }
 
   private attach(packageValue: StreamedChunkPackage, tier: ChunkTier): void {
+    const active = tier === 'active';
+    packageValue.activeRoot.visible = active;
+    if (packageValue.proxyRoot) packageValue.proxyRoot.visible = !active;
     this.scene.add(packageValue.activeRoot);
     if (packageValue.proxyRoot) this.scene.add(packageValue.proxyRoot);
-    this.applyTier(packageValue, tier);
-    this.materialsChanged ||= packageValue.materialsChanged !== false;
+    if (active) {
+      this.markDynamicChange();
+      this.materialsChanged ||= packageValue.materialsChanged !== false;
+    }
   }
 
   private detach(packageValue: StreamedChunkPackage, tier: ChunkTier): void {
-    if (tier === 'active') this.markDynamicChange();
+    if (tier === 'active') {
+      this.markDynamicChange();
+      this.materialsChanged ||= packageValue.materialsChanged !== false;
+    }
     this.scene.remove(packageValue.activeRoot);
     if (packageValue.proxyRoot) this.scene.remove(packageValue.proxyRoot);
-    this.materialsChanged ||= packageValue.materialsChanged !== false;
   }
 
   private applyTier(packageValue: StreamedChunkPackage, tier: ChunkTier): void {
@@ -145,6 +152,7 @@ export class StreamedSceneRuntime {
     if (packageValue.activeRoot.visible !== activeVisible) {
       packageValue.activeRoot.visible = activeVisible;
       this.markDynamicChange();
+      this.materialsChanged ||= packageValue.materialsChanged !== false;
     }
     if (packageValue.proxyRoot) packageValue.proxyRoot.visible = !activeVisible;
   }
