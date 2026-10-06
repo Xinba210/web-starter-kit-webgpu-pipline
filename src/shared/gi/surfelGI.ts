@@ -417,7 +417,7 @@ export class SurfelGI {
     const materialIds = new Set<string>();
     scene.traverse(object => {
       const mesh = object as THREE.Mesh;
-      if (!mesh.isMesh || !mesh.visible) return;
+      if (!mesh.isMesh || !mesh.visible || mesh.userData.giExclude === true) return;
       for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
         materialIds.add(material.uuid);
         if (!this.bvh!.materialIdByUUID.has(material.uuid)) needsMaterials = true;
