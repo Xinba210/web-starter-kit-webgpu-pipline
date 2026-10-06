@@ -88,6 +88,12 @@ function validateInput(input: ChunkLightmapPackageInput): void {
       throw new Error(`XVLM chart ${chart} tile range is invalid`);
     }
   }
+
+  validateChunkLightmapIndex({
+    revision: input.revision,
+    charts: input.charts,
+    tiles: input.tiles.map(({ chart, level, tileX, tileY, parent }) => ({ chart, level, tileX, tileY, parent })),
+  });
 }
 
 export async function encodeChunkLightmapPackage(input: ChunkLightmapPackageInput): Promise<ArrayBuffer> {
@@ -174,6 +180,8 @@ export async function decodeChunkLightmapPackage(buffer: ArrayBuffer): Promise<D
   if (!Number.isFinite(metadata.metresPerTexel) || metadata.metresPerTexel <= 0) throw new Error('XVLM metadata has invalid metresPerTexel');
   if (!Number.isInteger(metadata.tileSize) || metadata.tileSize < 1) throw new Error('XVLM metadata has invalid tileSize');
   if (!Number.isInteger(metadata.border) || metadata.border < 0) throw new Error('XVLM metadata has invalid border');
+  if (!Number.isInteger(metadata.fallbackWidth) || metadata.fallbackWidth < 1) throw new Error('XVLM metadata has invalid fallbackWidth');
+  if (!Number.isInteger(metadata.fallbackHeight) || metadata.fallbackHeight < 1) throw new Error('XVLM metadata has invalid fallbackHeight');
   if (!Array.isArray(metadata.charts) || metadata.charts.length < 1) throw new Error('XVLM metadata has no charts');
   if (!Array.isArray(metadata.tiles)) throw new Error('XVLM metadata has no tile index');
 
