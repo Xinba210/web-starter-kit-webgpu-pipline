@@ -100,9 +100,16 @@ export function remapLightmapCharts(root: THREE.Object3D, allocation: ChartAlloc
     if (!attribute) return;
     if (attribute.itemSize !== 1) throw new Error(`lightmapChart on ${mesh.name || mesh.uuid} must have itemSize 1`);
 
-    const values = new Float32Array(attribute.count);
-    for (let index = 0; index < attribute.count; index++) {
-      const local = Math.round(attribute.getX(index));
+    let localCharts = mesh.geometry.userData.chunkLightmapLocalCharts as Float32Array | undefined;
+    if (!localCharts) {
+      localCharts = new Float32Array(attribute.count);
+      for (let index = 0; index < attribute.count; index++) localCharts[index] = Math.round(attribute.getX(index));
+      mesh.geometry.userData.chunkLightmapLocalCharts = localCharts;
+    }
+
+    const values = new Float32Array(localCharts.length);
+    for (let index = 0; index < localCharts.length; index++) {
+      const local = localCharts[index];
       if (local < 0 || local >= allocation.count) {
         throw new Error(`lightmapChart ${local} on ${mesh.name || mesh.uuid} exceeds chunk chart count ${allocation.count}`);
       }
