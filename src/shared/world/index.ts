@@ -31,6 +31,7 @@ export {
   StreamedSceneRuntime,
   type StreamedChunkPackage,
   type StreamedChunkProvider,
+  type StreamedChunkLightingController,
   type StreamedSceneChanges,
 } from './streamedScene.ts';
 
@@ -44,6 +45,7 @@ export {
   type StreamedAssetSpec,
   type StreamedAssetTransform,
   type StreamedChunkSpec,
+  type StreamedChunkLightingSpec,
 } from './assetManifest.ts';
 
 export {
