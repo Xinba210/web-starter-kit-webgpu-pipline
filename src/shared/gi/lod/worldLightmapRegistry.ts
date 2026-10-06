@@ -31,6 +31,7 @@ export interface RegisteredChunkLightmap {
   generation: number;
   charts: ChartAllocation;
   tiles: ChartAllocation;
+  tileCount: number;
 }
 
 export class WorldLightmapRegistry {
@@ -95,7 +96,7 @@ export class WorldLightmapRegistry {
       this.tileY[slot] = record.tileY;
     }
 
-    const registered = { owner, revision: index.revision, generation, charts, tiles };
+    const registered = { owner, revision: index.revision, generation, charts, tiles, tileCount: index.tiles.length };
     this.chunks.set(owner, registered);
     return registered;
   }
@@ -132,7 +133,7 @@ export class WorldLightmapRegistry {
 
   tileHandle(owner: string, localTile: number): WorldTileHandle {
     const chunk = this.require(owner);
-    if (localTile < 0 || localTile >= chunk.tiles.count) throw new Error(`local tile ${localTile} is outside ${owner}`);
+    if (localTile < 0 || localTile >= chunk.tileCount) throw new Error(`local tile ${localTile} is outside ${owner}`);
     return { slot: chunk.tiles.base + localTile, generation: chunk.generation };
   }
 
