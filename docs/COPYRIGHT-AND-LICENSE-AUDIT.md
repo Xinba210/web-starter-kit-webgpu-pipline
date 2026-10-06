@@ -102,6 +102,20 @@ Priority separation boundaries:
 
 These modules should depend on Three.js contracts rather than private inherited renderer internals wherever practical.
 
+## Runtime provenance gate
+
+The streaming runtime now requires production assets to declare provenance in `StreamedAssetManifest`.
+
+Recognized clearance states:
+
+- `xinba-owned`
+- `cleared-commercial`
+- `prototype-only`
+
+A cleared build rejects `prototype-only` assets by default. Externally licensed `cleared-commercial` assets must carry a `licenseRef`.
+
+This does not turn an uncleared asset into a cleared one; it prevents an already-known prototype/uncleared asset from silently entering the production streaming path.
+
 ## Release gate
 
 Do not ship a paid game, publish this renderer as Xinba-owned open source, or sublicense the full fork until one of these is true:
