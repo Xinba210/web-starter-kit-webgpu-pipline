@@ -339,7 +339,7 @@ function installAtlasHooks(p: Pipeline): void {
       feedbackReads: lod.feedback.readsDone,
       feedbackDrawn: lod.feedback.drawnLastRead,
       feedbackTiles: lod.feedback.priorities.size,
-      feedbackMaxWeight: Math.max(0, ...lod.feedback.priorities.values()),
+      feedbackMaxWeight: lod.feedback.maxPriorityLastRead,
       feedbackLevels: lod.feedback.levelsLastRead,
       feedbackOnTail: lod.feedback.onTailLastRead,
       uploadedKiB: +(lod.pool.uploadedBytesLastFrame / 1024).toFixed(1),
