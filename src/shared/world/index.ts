@@ -16,6 +16,7 @@ export {
 
 export {
   CameraChunkStreamer,
+  chunkId,
   chunkWorldOrigin,
   type ChunkCameraSample,
   type ChunkCoordinate,
