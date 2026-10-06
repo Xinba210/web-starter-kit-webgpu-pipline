@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { ChartNamespace, remapLightmapCharts } from './chartNamespace.ts';
+import { ChartNamespace, remapLightmapCharts, restoreLocalLightmapCharts } from './chartNamespace.ts';
 
 describe('ChartNamespace', () => {
   it('allocates non-overlapping ranges and reuses released space', () => {
@@ -56,6 +56,21 @@ describe('remapLightmapCharts', () => {
     const remapped = geometry.getAttribute('lightmapChart');
     expect([remapped.getX(0), remapped.getX(1), remapped.getX(2)]).toEqual([20, 21, 21]);
     expect(geometry.userData.chunkLightmapOwner).toBe('4:2');
+  });
+
+  it('restores original local chart ids after a global remap', () => {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0], 3));
+    geometry.setAttribute('lightmapChart', new THREE.Float32BufferAttribute([0, 1], 1));
+    const root = new THREE.Group();
+    root.add(new THREE.Mesh(geometry, new THREE.MeshBasicMaterial()));
+
+    remapLightmapCharts(root, { owner: '0:0', base: 12, count: 2, generation: 1 });
+    expect([geometry.getAttribute('lightmapChart').getX(0), geometry.getAttribute('lightmapChart').getX(1)]).toEqual([12, 13]);
+
+    expect(restoreLocalLightmapCharts(root)).toBe(1);
+    expect([geometry.getAttribute('lightmapChart').getX(0), geometry.getAttribute('lightmapChart').getX(1)]).toEqual([0, 1]);
+    expect(geometry.userData.chunkLightmapOwner).toBeUndefined();
   });
 
   it('rejects a local chart id outside the chunk allocation', () => {
