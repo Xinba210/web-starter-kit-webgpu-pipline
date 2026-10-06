@@ -13,6 +13,7 @@ export { TilePool } from './tilePool.ts';
 export { DemandFeedback } from './feedback.ts';
 export { MemoryLightmapTileSource, expectedTileBytes, floatPixelsToHalf, type LightmapTileSource } from './tileSource.ts';
 export { ChartNamespace, remapLightmapCharts, type ChartAllocation } from './chartNamespace.ts';
+export { ChunkLightingRuntime, type ActiveChunkLighting } from './chunkLighting.ts';
 
 export interface LodSettings {
   tileSize: number;
