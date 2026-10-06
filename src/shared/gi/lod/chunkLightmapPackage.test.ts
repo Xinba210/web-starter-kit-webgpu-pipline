@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   decodeChunkLightmapPackage,
   encodeChunkLightmapPackage,
+  extractChunkFallbackTile,
   type ChunkLightmapPackageInput,
 } from './chunkLightmapPackage.ts';
 
@@ -58,6 +59,18 @@ describe('XVLM chunk lightmap package', () => {
     expect(Array.from(decoded.tile(0))).toEqual(Array.from(source.tiles[0].pixels));
     expect(Array.from(decoded.tile(1))).toEqual(Array.from(source.tiles[1].pixels));
     expect(() => decoded.tile(2)).toThrow(/no tile/);
+  });
+
+  it('extracts each fallback chart into a full bordered physical tile', async () => {
+    const source = input();
+    const decoded = await decodeChunkLightmapPackage(await encodeChunkLightmapPackage(source));
+    const tile = extractChunkFallbackTile(decoded, 0);
+    const physical = decoded.tileSize + decoded.border * 2;
+    expect(tile.length).toBe(physical * physical * 4);
+    expect(Array.from(tile.slice(0, 4))).toEqual(Array.from(source.fallback.slice(0, 4)));
+    const lastSource = source.fallback.slice(source.fallback.length - 4);
+    const lastTile = tile.slice(tile.length - 4);
+    expect(Array.from(lastTile)).toEqual(Array.from(lastSource));
   });
 
   it('rejects tampering through the package checksum', async () => {
