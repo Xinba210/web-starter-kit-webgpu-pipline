@@ -29,6 +29,7 @@ export interface StreamedSceneChanges {
 type ResidentChunk = {
   package: StreamedChunkPackage;
   tier: ChunkTier;
+  attached: boolean;
 };
 
 export class StreamedSceneRuntime {
@@ -47,21 +48,18 @@ export class StreamedSceneRuntime {
     this.streamer = new CameraChunkStreamer<ResidentChunk>({
       load: async (coord, tier, signal) => {
         const packageValue = await this.provider.load(coord, signal);
-        if (signal.aborted) {
-          await packageValue.dispose?.();
-          return { package: packageValue, tier };
-        }
+        if (signal.aborted) return { package: packageValue, tier, attached: false };
         this.prepare(packageValue);
         this.attach(packageValue, tier);
-        return { package: packageValue, tier };
+        return { package: packageValue, tier, attached: true };
       },
       unload: async (resident) => {
-        this.detach(resident.package, resident.tier);
+        if (resident.attached) this.detach(resident.package, resident.tier);
         await resident.package.dispose?.();
       },
       setTier: (resident, tier) => {
         if (resident.tier === tier) return;
-        this.applyTier(resident.package, tier);
+        if (resident.attached) this.applyTier(resident.package, tier);
         resident.tier = tier;
       },
     }, settings);
