@@ -82,8 +82,8 @@ export class TilePool {
     this.uploadPageTable();
   }
 
-  serve(requested: Set<number>): void {
-    const { copies } = this.residency.serve(requested);
+  serve(requested: Set<number>, priorities?: ReadonlyMap<number, number>): void {
+    const { copies } = this.residency.serve(requested, priorities);
     const side = this.pyramids.physicalTile;
     let bytes = 0;
     for (const { key, slot } of copies) {
