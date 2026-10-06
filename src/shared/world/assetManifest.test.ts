@@ -41,6 +41,19 @@ describe('streamed asset manifest', () => {
     expect(() => validateStreamedAssetManifest(value)).toThrow(/license reference/);
   });
 
+  it('validates chunk-owned lighting metadata before runtime registration', () => {
+    const value = manifest('xinba-owned');
+    value.chunks[0].lighting = {
+      packageUrl: '/lighting/0-0.xvlm',
+      chartCount: 12,
+      revision: 'fixture-v1',
+      metresPerTexel: 0.05,
+    };
+    expect(() => validateStreamedAssetManifest(value)).not.toThrow();
+    value.chunks[0].lighting.chartCount = 0;
+    expect(() => validateStreamedAssetManifest(value)).toThrow(/chartCount/);
+  });
+
   it('rejects duplicate asset ids across chunks', () => {
     const value = manifest('xinba-owned');
     value.chunks.push({
