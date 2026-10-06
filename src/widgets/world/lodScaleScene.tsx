@@ -3,7 +3,7 @@ import * as THREE from 'three/webgpu';
 import { color as tslColor } from 'three/tsl';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createScene } from '../../shared/gi/surfel/scene.ts';
-import { CameraChunkStreamer, Layer, chunkWorldOrigin, type ChunkTier } from '../../shared/world/index.ts';
+import { Layer, StreamedSceneRuntime, chunkWorldOrigin } from '../../shared/world/index.ts';
 import { createFiberSceneRoot, StaticGroup } from '../../shared/fiber/index.ts';
 import { bootStage } from '../../shared/ui/bootProgress.ts';
 
@@ -13,6 +13,7 @@ export interface LodScaleScene {
   controls: OrbitControls;
   sun: THREE.DirectionalLight;
   update: (elapsedSeconds: number) => void;
+  streaming?: StreamedSceneRuntime;
 }
 
 const GROUND_METRES = 24;
@@ -132,64 +133,43 @@ function LongWall() {
  * (`lightmap={false}`): they are occluders, and thousands of thin charts would only fill
  * the tail.
  */
-function createChunkStreamLab(scene: THREE.Scene, camera: THREE.PerspectiveCamera) {
+function createChunkStreamLab(scene: THREE.Scene, camera: THREE.PerspectiveCamera): StreamedSceneRuntime | null {
   const params = new URLSearchParams(location.search);
   if (params.get('chunks') !== '1') return null;
 
   const cellSize = Number(params.get('chunkSize') ?? '18');
-  const root = new THREE.Group();
-  root.name = 'chunk-stream-lab';
-  root.layers.set(Layer.Debug);
-  scene.add(root);
+  const activePlatformGeometry = new THREE.BoxGeometry(cellSize * 0.92, 0.16, cellSize * 0.92);
+  const activeMarkerGeometry = new THREE.BoxGeometry(1.4, 1, 1.4);
+  const proxyGeometry = new THREE.BoxGeometry(cellSize * 0.8, 0.35, cellSize * 0.8);
+  const activeMaterial = new THREE.MeshStandardNodeMaterial({ color: 0xd7c69a, roughness: 0.82 });
+  const proxyMaterial = new THREE.MeshStandardNodeMaterial({ color: 0x5f6958, roughness: 1 });
 
-  const platformGeometry = new THREE.BoxGeometry(cellSize * 0.92, 0.12, cellSize * 0.92);
-  const markerGeometry = new THREE.BoxGeometry(1.2, 1, 1.2);
-  const activeMaterial = new THREE.MeshBasicMaterial({ color: 0xd7c69a });
-  const prefetchMaterial = new THREE.MeshBasicMaterial({ color: 0x76806a });
-  const forward = new THREE.Vector3();
-
-  const applyTier = (group: THREE.Group, tier: ChunkTier) => {
-    const material = tier === 'active' ? activeMaterial : prefetchMaterial;
-    group.traverse((object) => {
-      const mesh = object as THREE.Mesh;
-      if (mesh.isMesh) mesh.material = material;
-    });
-  };
-
-  const streamer = new CameraChunkStreamer<THREE.Group>({
-    load(coord, tier) {
+  const streaming = new StreamedSceneRuntime(scene, {
+    load(coord) {
       const origin = chunkWorldOrigin(coord, cellSize);
-      const group = new THREE.Group();
-      group.name = `stream-chunk-${coord.x}-${coord.z}`;
-      group.position.set(origin.x, -0.45, origin.z);
-      group.userData.giExclude = true;
-      const platform = new THREE.Mesh(platformGeometry, prefetchMaterial);
-      platform.name = `${group.name}-platform`;
-      group.add(platform);
+      const activeRoot = new THREE.Group();
+      activeRoot.name = `stream-active-${coord.x}-${coord.z}`;
+      activeRoot.position.set(origin.x, -0.42, origin.z);
+
+      const platform = new THREE.Mesh(activePlatformGeometry, activeMaterial);
+      platform.name = `${activeRoot.name}-platform`;
+      activeRoot.add(platform);
+
       const height = 1.5 + ((Math.abs(coord.x * 17 + coord.z * 31) % 5) * 0.65);
-      const markerMesh = new THREE.Mesh(markerGeometry, prefetchMaterial);
-      markerMesh.name = `${group.name}-marker`;
-      markerMesh.scale.y = height;
-      markerMesh.position.y = height * 0.5 + 0.06;
-      group.add(markerMesh);
-      group.traverse((object) => {
-        object.layers.set(Layer.Debug);
-        object.userData.giExclude = true;
-        const mesh = object as THREE.Mesh;
-        if (mesh.isMesh) {
-          mesh.castShadow = false;
-          mesh.receiveShadow = false;
-        }
-      });
-      applyTier(group, tier);
-      root.add(group);
-      return group;
-    },
-    unload(group) {
-      root.remove(group);
-    },
-    setTier(group, tier) {
-      applyTier(group, tier);
+      const marker = new THREE.Mesh(activeMarkerGeometry, activeMaterial);
+      marker.name = `${activeRoot.name}-marker`;
+      marker.scale.y = height;
+      marker.position.y = height * 0.5 + 0.08;
+      activeRoot.add(marker);
+
+      const proxyRoot = new THREE.Group();
+      proxyRoot.name = `stream-proxy-${coord.x}-${coord.z}`;
+      proxyRoot.position.set(origin.x, -0.38, origin.z);
+      const proxy = new THREE.Mesh(proxyGeometry, proxyMaterial);
+      proxy.name = `${proxyRoot.name}-mesh`;
+      proxyRoot.add(proxy);
+
+      return { activeRoot, proxyRoot, materialsChanged: true };
     },
   }, {
     cellSize,
@@ -201,24 +181,13 @@ function createChunkStreamLab(scene: THREE.Scene, camera: THREE.PerspectiveCamer
     maxUnloadsPerUpdate: Number(params.get('chunkUnloads') ?? '6'),
   });
 
-  const update = () => {
-    camera.getWorldDirection(forward);
-    return streamer.update({
-      x: camera.position.x,
-      z: camera.position.z,
-      forwardX: forward.x,
-      forwardZ: forward.z,
-    });
-  };
-
-  update();
+  streaming.update(camera);
   (window as unknown as Record<string, unknown>).__chunks = {
-    snapshot: () => streamer.snapshot(),
-    resident: () => streamer.residentIds(),
-    update,
+    snapshot: () => streaming.snapshot(),
+    resident: () => streaming.residentIds(),
+    update: () => streaming.update(camera),
   };
-
-  return { streamer, update };
+  return streaming;
 }
 
 export async function createLodScaleScene(renderer: THREE.WebGPURenderer): Promise<LodScaleScene> {
@@ -264,9 +233,10 @@ export async function createLodScaleScene(renderer: THREE.WebGPURenderer): Promi
     camera,
     controls,
     sun,
+    streaming: chunkStream ?? undefined,
     update(t) {
       fiber.advance(t);
-      chunkStream?.update();
+      chunkStream?.update(camera);
     },
   };
 }
