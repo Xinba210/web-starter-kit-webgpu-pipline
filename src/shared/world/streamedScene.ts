@@ -111,7 +111,7 @@ export class StreamedSceneRuntime {
     applyMobility(packageValue.activeRoot, Mobility.Movable, { contributesToStaticGi: false });
     packageValue.activeRoot.traverse((object) => {
       object.userData.streamedChunkRole = 'active';
-      object.userData.giExclude = false;
+      if (object.userData.giExclude === undefined) object.userData.giExclude = false;
     });
 
     if (packageValue.proxyRoot) {
