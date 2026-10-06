@@ -15,14 +15,14 @@ export interface GltfChunkProviderOptions extends ManifestValidationOptions {
 }
 
 function runtimeBaseUrl(explicit?: string): string {
-  if (explicit) return explicit;
-  return typeof location !== 'undefined' ? location.href : 'http://localhost/';
+  const page = typeof location !== 'undefined' ? location.href : 'http://localhost/';
+  return explicit ? new URL(explicit, page).href : page;
 }
 
 function applyTransform(root: THREE.Object3D, transform?: StreamedAssetTransform): void {
   if (!transform) return;
   if (transform.position) root.position.fromArray(transform.position);
-  if (transform.rotation) root.rotation.fromArray([...transform.rotation, 'XYZ']);
+  if (transform.rotation) root.rotation.set(transform.rotation[0], transform.rotation[1], transform.rotation[2]);
   if (transform.scale) root.scale.fromArray(transform.scale);
   root.updateMatrixWorld(true);
 }
