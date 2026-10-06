@@ -288,8 +288,10 @@ Do not push experimental renderer rewrites directly to `main`.
 
 ## 8. NEXT_MANDATORY
 
-Complete the **Blender/Hunyuan3D -> Active GLB + Proxy GLB -> manifest -> Three.js** handshake with one Xinba-owned asset pair, then run a headed WebGPU acceptance pass that records Active/Proxy transitions, dynamic-BVH membership, triangle/memory cost and unload cleanup.
+Build the **Pinned Fallback Physical Pool** for chunk-owned XVLM lighting, then connect visible-fragment demand to fine XVLM tile uploads.
 
-After that, add chunk-owned baked-lighting transport so streamed architecture can reach baked-static visual quality without forcing a whole-world lightmap/BVH rebuild.
+The production asset handshake now has a committed Xinba-owned engineering fixture: Active GLB + Proxy GLB + manifest + XVLM + browser/non-browser acceptance gates. It deliberately does not claim final art quality. The first Blender/Hunyuan3D-authored high-quality asset remains mandatory once the authorized Windows tool device is available.
+
+After physical fallback/fine-tile residency, move to projected-screen-size geometry LOD/HLOD and texture/material streaming.
 
 Commercialization must follow `docs/COPYRIGHT-AND-LICENSE-AUDIT.md`; new Xinba-owned modules stay separable from inherited upstream implementation.
