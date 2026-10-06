@@ -3,6 +3,7 @@ import * as THREE from 'three/webgpu';
 import { color as tslColor } from 'three/tsl';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createScene } from '../../shared/gi/surfel/scene.ts';
+import { ChunkLightingRuntime } from '../../shared/gi/lod/index.ts';
 import { Layer, StreamedSceneRuntime, chunkWorldOrigin, createGltfChunkProvider, type StreamedAssetManifest } from '../../shared/world/index.ts';
 import { createFiberSceneRoot, StaticGroup } from '../../shared/fiber/index.ts';
 import { bootStage } from '../../shared/ui/bootProgress.ts';
@@ -151,11 +152,12 @@ async function createChunkStreamLab(scene: THREE.Scene, camera: THREE.Perspectiv
   };
 
   let streaming: StreamedSceneRuntime;
+  const chunkLighting = new ChunkLightingRuntime();
   if (mode === 'asset') {
     const response = await fetch('/streaming/xinba-pavilion/manifest.json');
     if (!response.ok) throw new Error(`streaming fixture manifest failed: HTTP ${response.status}`);
     const manifest = await response.json() as StreamedAssetManifest;
-    streaming = new StreamedSceneRuntime(scene, createGltfChunkProvider(manifest), settings);
+    streaming = new StreamedSceneRuntime(scene, createGltfChunkProvider(manifest), settings, chunkLighting);
   } else {
     const activePlatformGeometry = new THREE.BoxGeometry(cellSize * 0.92, 0.16, cellSize * 0.92);
     const activeMarkerGeometry = new THREE.BoxGeometry(1.4, 1, 1.4);
@@ -190,7 +192,7 @@ async function createChunkStreamLab(scene: THREE.Scene, camera: THREE.Perspectiv
 
         return { activeRoot, proxyRoot, materialsChanged: true };
       },
-    }, settings);
+    }, settings, chunkLighting);
   }
 
   streaming.update(camera);
