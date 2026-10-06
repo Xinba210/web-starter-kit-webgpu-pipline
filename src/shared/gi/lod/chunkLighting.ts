@@ -150,12 +150,18 @@ export class ChunkLightingRuntime implements StreamedChunkLightingController {
         this.registry.unregister(entry.owner);
         return;
       }
-      entry.remappedGeometries = remapLightmapCharts(entry.root, registered.charts);
       entry.registered = registered;
+      entry.remappedGeometries = remapLightmapCharts(entry.root, registered.charts);
       entry.package = packageValue;
+      this.packageTileSize ??= packageValue.tileSize;
+      this.packageBorder ??= packageValue.border;
       entry.state = 'ready';
     } catch (error) {
       if (!this.isCurrent(entry) || entry.controller.signal.aborted) return;
+      if (entry.registered) {
+        this.registry.unregister(entry.owner);
+        entry.registered = undefined;
+      }
       entry.state = 'failed';
       entry.error = String(error);
     }
@@ -181,7 +187,5 @@ export class ChunkLightingRuntime implements StreamedChunkLightingController {
     if (this.packageBorder !== null && this.packageBorder !== packageValue.border) {
       throw new Error(`chunk lighting border mismatch: expected ${this.packageBorder}, got ${packageValue.border}`);
     }
-    this.packageTileSize ??= packageValue.tileSize;
-    this.packageBorder ??= packageValue.border;
   }
 }
