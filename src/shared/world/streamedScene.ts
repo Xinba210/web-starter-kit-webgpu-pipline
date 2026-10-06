@@ -119,6 +119,15 @@ export class StreamedSceneRuntime {
     this.streamer.dispose();
   }
 
+  private contributesDynamic(packageValue: StreamedChunkPackage): boolean {
+    let contributes = false;
+    packageValue.activeRoot.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (mesh.isMesh && mesh.userData.giExclude !== true) contributes = true;
+    });
+    return contributes;
+  }
+
   private prepare(packageValue: StreamedChunkPackage): void {
     applyMobility(packageValue.activeRoot, Mobility.Movable, { contributesToStaticGi: false });
     packageValue.activeRoot.traverse((object) => {
@@ -146,16 +155,20 @@ export class StreamedSceneRuntime {
     if (packageValue.proxyRoot) this.scene.add(packageValue.proxyRoot);
     if (active) {
       if (packageValue.lighting) this.lighting?.activate(owner, packageValue.activeRoot, packageValue.lighting);
-      this.markDynamicChange();
-      this.materialsChanged ||= packageValue.materialsChanged !== false;
+      if (this.contributesDynamic(packageValue)) {
+        this.markDynamicChange();
+        this.materialsChanged ||= packageValue.materialsChanged !== false;
+      }
     }
   }
 
   private detach(owner: string, packageValue: StreamedChunkPackage, tier: ChunkTier): void {
     if (tier === 'active') {
       if (packageValue.lighting) this.lighting?.deactivate(owner);
-      this.markDynamicChange();
-      this.materialsChanged ||= packageValue.materialsChanged !== false;
+      if (this.contributesDynamic(packageValue)) {
+        this.markDynamicChange();
+        this.materialsChanged ||= packageValue.materialsChanged !== false;
+      }
     }
     this.scene.remove(packageValue.activeRoot);
     if (packageValue.proxyRoot) this.scene.remove(packageValue.proxyRoot);
@@ -169,8 +182,10 @@ export class StreamedSceneRuntime {
         else this.lighting?.deactivate(owner);
       }
       packageValue.activeRoot.visible = activeVisible;
-      this.markDynamicChange();
-      this.materialsChanged ||= packageValue.materialsChanged !== false;
+      if (this.contributesDynamic(packageValue)) {
+        this.markDynamicChange();
+        this.materialsChanged ||= packageValue.materialsChanged !== false;
+      }
     }
     if (packageValue.proxyRoot) packageValue.proxyRoot.visible = !activeVisible;
   }
