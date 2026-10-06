@@ -20,12 +20,21 @@ export {
   type ChunkLightmapIndex,
   type ChunkTileIndexRecord,
   type RegisteredChunkLightmap,
+  type WorldChartHandle,
   type WorldTileHandle,
+  validateChunkLightmapIndex,
 } from './worldLightmapRegistry.ts';
+export {
+  PinnedFallbackPool,
+  PinnedFallbackResidency,
+  type PinnedFallbackPlacement,
+} from './fallbackPool.ts';
 export {
   decodeChunkLightmapPackage,
   encodeChunkLightmapPackage,
+  extractChunkFallbackTile,
   loadChunkLightmapPackage,
+  type ChunkFallbackRect,
   type ChunkLightmapPackageInput,
   type DecodedChunkLightmapPackage,
 } from './chunkLightmapPackage.ts';
