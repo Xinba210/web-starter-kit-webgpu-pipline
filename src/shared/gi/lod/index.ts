@@ -14,6 +14,14 @@ export { DemandFeedback } from './feedback.ts';
 export { MemoryLightmapTileSource, expectedTileBytes, floatPixelsToHalf, type LightmapTileSource } from './tileSource.ts';
 export { ChartNamespace, remapLightmapCharts, type ChartAllocation } from './chartNamespace.ts';
 export { ChunkLightingRuntime, type ActiveChunkLighting } from './chunkLighting.ts';
+export {
+  WorldLightmapRegistry,
+  type ChunkChartIndexRecord,
+  type ChunkLightmapIndex,
+  type ChunkTileIndexRecord,
+  type RegisteredChunkLightmap,
+  type WorldTileHandle,
+} from './worldLightmapRegistry.ts';
 
 export interface LodSettings {
   tileSize: number;
