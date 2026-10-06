@@ -629,6 +629,10 @@ function startLoop(p: Pipeline, ui: PipelineUi, state: { paused: boolean; stepOn
     frameGraph.beginFrame();
     if (!state.frozen) p.dynamic?.update(now * 0.001);
     if (!post.still) host.update?.(now * 0.001);
+    const streamingChanges = host.streaming?.consumeChanges();
+    if (streamingChanges?.dynamicMembershipChanged) {
+      gi.syncDynamicScene(renderer, scene, { materialsChanged: streamingChanges.materialsChanged });
+    }
     post.fog.update(now);
     if (p.staticLight.probeLive) {
       const sunNow = `${host.sun.intensity.toFixed(4)}|${host.sun.position.x.toFixed(3)}|${host.sun.position.y.toFixed(3)}|${host.sun.position.z.toFixed(3)}`;
@@ -694,7 +698,10 @@ async function runPipeline(renderer: THREE.WebGPURenderer, gi: SurfelGI, host: S
   await staticLight.prepare(frameGraph, { bakeTree, interiorVolumes: host.interiorVolumes });
   if (lighting.probeIntensity !== undefined && staticLight.probes) staticLight.probes.intensity.value = lighting.probeIntensity;
   const live = { on: url.flag('surfelGi', false) };
-  const cachedReflections = trace.mode === 'cached'
+  if (trace.mode === 'cached' && host.streaming) {
+    console.warn('[streaming] cached reflections are disabled for streamed membership changes; using the live reflection pass');
+  }
+  const cachedReflections = trace.mode === 'cached' && !host.streaming
     ? installReflectionCache(renderer, gi, host, { contactTree: trace.tree(), probes: staticLight.probes, trace, frameGraph, url })
     : null;
   if (staticLight.probes && url.flag('probeSpecular', true) && !cachedReflections) {
