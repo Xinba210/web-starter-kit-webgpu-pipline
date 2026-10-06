@@ -31,6 +31,7 @@ function packageValue(
     fallbackWidth: 4,
     fallbackHeight: 4,
     fallback: new Uint16Array(4 * 4 * 4),
+    fallbackCharts: Array.from({ length: chartCount }, (_, chart) => ({ x: chart * 2, y: 0, width: 2, height: 4 })),
     index: {
       revision,
       charts: Array.from({ length: chartCount }, () => ({ tailLevel: 0, tileStart: 0, tileCount: 0 })),
