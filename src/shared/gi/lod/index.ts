@@ -56,7 +56,7 @@ export class LightmapLod {
   update(camera: THREE.Camera, viewport: { width: number; height: number }): void {
     this.feedback.resize(viewport.width, viewport.height);
     this.feedback.render(camera);
-    this.pool.serve(this.feedback.requests);
+    this.pool.serve(this.feedback.requests, this.feedback.priorities);
   }
 
   dispose(): void {
