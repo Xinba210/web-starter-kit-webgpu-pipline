@@ -89,6 +89,25 @@ export class ChartNamespace {
   }
 }
 
+export function restoreLocalLightmapCharts(root: THREE.Object3D): number {
+  const seen = new Set<THREE.BufferGeometry>();
+  let restored = 0;
+
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || seen.has(mesh.geometry)) return;
+    const localCharts = mesh.geometry.userData.chunkLightmapLocalCharts as Float32Array | undefined;
+    if (!localCharts) return;
+    mesh.geometry.setAttribute('lightmapChart', new THREE.BufferAttribute(new Float32Array(localCharts), 1));
+    delete mesh.geometry.userData.chunkLightmapOwner;
+    delete mesh.geometry.userData.chunkLightmapBase;
+    seen.add(mesh.geometry);
+    restored++;
+  });
+
+  return restored;
+}
+
 export function remapLightmapCharts(root: THREE.Object3D, allocation: ChartAllocation): number {
   const seen = new Set<THREE.BufferGeometry>();
   let remapped = 0;
