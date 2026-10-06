@@ -116,6 +116,7 @@ export function createGltfChunkProvider(
       return {
         activeRoot,
         proxyRoot: hasProxy ? proxyRoot : undefined,
+        lighting: chunk?.lighting,
         materialsChanged: activeRoot.children.length > 0,
         dispose() {
           disposeResources(activeRoot);
