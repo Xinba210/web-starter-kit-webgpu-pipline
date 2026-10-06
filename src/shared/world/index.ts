@@ -33,3 +33,20 @@ export {
   type StreamedChunkProvider,
   type StreamedSceneChanges,
 } from './streamedScene.ts';
+
+export {
+  indexStreamedAssetManifest,
+  validateStreamedAssetManifest,
+  type AssetClearance,
+  type ManifestValidationOptions,
+  type StreamedAssetManifest,
+  type StreamedAssetProvenance,
+  type StreamedAssetSpec,
+  type StreamedAssetTransform,
+  type StreamedChunkSpec,
+} from './assetManifest.ts';
+
+export {
+  createGltfChunkProvider,
+  type GltfChunkProviderOptions,
+} from './gltfChunkProvider.ts';
