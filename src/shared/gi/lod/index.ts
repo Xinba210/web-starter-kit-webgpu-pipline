@@ -27,6 +27,7 @@ export {
 export {
   PinnedFallbackPool,
   PinnedFallbackResidency,
+  type ChunkFallbackPool,
   type PinnedFallbackPlacement,
 } from './fallbackPool.ts';
 export {
