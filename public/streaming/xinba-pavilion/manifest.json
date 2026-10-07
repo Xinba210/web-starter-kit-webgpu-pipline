@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "chunks": [
+    {
+      "coord": {
+        "x": 0,
+        "z": 0
+      },
+      "assets": [
+        {
+          "id": "xinba-pavilion-fixture",
+          "activeGlb": "/streaming/xinba-pavilion/xinba-pavilion-active.glb",
+          "proxyGlb": "/streaming/xinba-pavilion/xinba-pavilion-proxy.glb",
+          "provenance": {
+            "clearance": "xinba-owned",
+            "source": "Original procedural streaming fixture authored for Xinba210/web-starter-kit-webgpu-pipline on 2026-10-06"
+          }
+        }
+      ],
+      "lighting": {
+        "packageUrl": "/streaming/xinba-pavilion/xinba-pavilion.xvlm",
+        "chartCount": 1,
+        "revision": "fixture-light-v1",
+        "metresPerTexel": 0.05
+      }
+    }
+  ]
+}

@@ -3,7 +3,8 @@ import * as THREE from 'three/webgpu';
 import { color as tslColor } from 'three/tsl';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createScene } from '../../shared/gi/surfel/scene.ts';
-import { Layer } from '../../shared/world/index.ts';
+import { ChunkLightingRuntime, PinnedFallbackPool } from '../../shared/gi/lod/index.ts';
+import { Layer, StreamedSceneRuntime, chunkWorldOrigin, createGltfChunkProvider, type StreamedAssetManifest } from '../../shared/world/index.ts';
 import { createFiberSceneRoot, StaticGroup } from '../../shared/fiber/index.ts';
 import { bootStage } from '../../shared/ui/bootProgress.ts';
 
@@ -13,6 +14,7 @@ export interface LodScaleScene {
   controls: OrbitControls;
   sun: THREE.DirectionalLight;
   update: (elapsedSeconds: number) => void;
+  streaming?: StreamedSceneRuntime;
 }
 
 const GROUND_METRES = 24;
@@ -41,6 +43,7 @@ const CAMERA_PRESETS: Record<string, [number[], number[]]> = {
   wall: [[4, 2, -6], [-2, 1.5, -11]],
   glow: [[6, 1.6, 2], [6, 0, -4]],
   far: [[60, 30, 60], [0, 0, 0]],
+  streaming: [[9, 7, 10], [0, 2.2, 0]],
 };
 
 function Slats({ span, height, pitch, width, axis }: { span: number; height: number; pitch: number; width: number; axis: 'x' | 'z' }) {
@@ -132,6 +135,76 @@ function LongWall() {
  * (`lightmap={false}`): they are occluders, and thousands of thin charts would only fill
  * the tail.
  */
+async function createChunkStreamLab(renderer: THREE.WebGPURenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera): Promise<StreamedSceneRuntime | null> {
+  const params = new URLSearchParams(location.search);
+  const mode = params.get('chunks');
+  if (mode !== '1' && mode !== 'asset') return null;
+
+  const cellSize = Number(params.get('chunkSize') ?? '18');
+  const settings = {
+    cellSize,
+    activeRadius: Number(params.get('chunkActive') ?? '1.35'),
+    prefetchRadius: Number(params.get('chunkPrefetch') ?? '3.1'),
+    unloadRadius: Number(params.get('chunkUnload') ?? '4.5'),
+    lookAheadCells: Number(params.get('chunkLookAhead') ?? '1.75'),
+    maxLoadsPerUpdate: Number(params.get('chunkLoads') ?? '4'),
+    maxUnloadsPerUpdate: Number(params.get('chunkUnloads') ?? '6'),
+  };
+
+  let streaming: StreamedSceneRuntime;
+  const fallbackPool = new PinnedFallbackPool(renderer, 64, 2, 16);
+  const chunkLighting = new ChunkLightingRuntime(65536, 262144, undefined, fallbackPool);
+  if (mode === 'asset') {
+    const response = await fetch('/streaming/xinba-pavilion/manifest.json');
+    if (!response.ok) throw new Error(`streaming fixture manifest failed: HTTP ${response.status}`);
+    const manifest = await response.json() as StreamedAssetManifest;
+    streaming = new StreamedSceneRuntime(scene, createGltfChunkProvider(manifest), settings, chunkLighting);
+  } else {
+    const activePlatformGeometry = new THREE.BoxGeometry(cellSize * 0.92, 0.16, cellSize * 0.92);
+    const activeMarkerGeometry = new THREE.BoxGeometry(1.4, 1, 1.4);
+    const proxyGeometry = new THREE.BoxGeometry(cellSize * 0.8, 0.35, cellSize * 0.8);
+    const activeMaterial = new THREE.MeshStandardNodeMaterial({ color: 0xd7c69a, roughness: 0.82 });
+    const proxyMaterial = new THREE.MeshStandardNodeMaterial({ color: 0x5f6958, roughness: 1 });
+
+    streaming = new StreamedSceneRuntime(scene, {
+      load(coord) {
+        const origin = chunkWorldOrigin(coord, cellSize);
+        const activeRoot = new THREE.Group();
+        activeRoot.name = `stream-active-${coord.x}-${coord.z}`;
+        activeRoot.position.set(origin.x, -0.42, origin.z);
+
+        const platform = new THREE.Mesh(activePlatformGeometry, activeMaterial);
+        platform.name = `${activeRoot.name}-platform`;
+        activeRoot.add(platform);
+
+        const height = 1.5 + ((Math.abs(coord.x * 17 + coord.z * 31) % 5) * 0.65);
+        const marker = new THREE.Mesh(activeMarkerGeometry, activeMaterial);
+        marker.name = `${activeRoot.name}-marker`;
+        marker.scale.y = height;
+        marker.position.y = height * 0.5 + 0.08;
+        activeRoot.add(marker);
+
+        const proxyRoot = new THREE.Group();
+        proxyRoot.name = `stream-proxy-${coord.x}-${coord.z}`;
+        proxyRoot.position.set(origin.x, -0.38, origin.z);
+        const proxy = new THREE.Mesh(proxyGeometry, proxyMaterial);
+        proxy.name = `${proxyRoot.name}-mesh`;
+        proxyRoot.add(proxy);
+
+        return { activeRoot, proxyRoot, materialsChanged: true };
+      },
+    }, settings, chunkLighting);
+  }
+
+  streaming.update(camera);
+  (window as unknown as Record<string, unknown>).__chunks = {
+    snapshot: () => streaming.snapshot(),
+    resident: () => streaming.residentIds(),
+    update: () => streaming.update(camera),
+  };
+  return streaming;
+}
+
 export async function createLodScaleScene(renderer: THREE.WebGPURenderer): Promise<LodScaleScene> {
   const { scene, camera, controls, dirLight: sun } = createScene(renderer);
   scene.name = 'lod-scale';
@@ -168,6 +241,17 @@ export async function createLodScaleScene(renderer: THREE.WebGPURenderer): Promi
     </group>,
   ));
   window.addEventListener('resize', () => fiber.resize(renderer.domElement.clientWidth, renderer.domElement.clientHeight));
+  const chunkStream = await createChunkStreamLab(renderer, scene, camera);
 
-  return { scene, camera, controls, sun, update(t) { fiber.advance(t); } };
+  return {
+    scene,
+    camera,
+    controls,
+    sun,
+    streaming: chunkStream ?? undefined,
+    update(t) {
+      fiber.advance(t);
+      chunkStream?.update(camera);
+    },
+  };
 }

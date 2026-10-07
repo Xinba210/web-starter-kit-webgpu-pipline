@@ -156,6 +156,7 @@ export class SurfelGI {
   private bakedAtlasIntensity: unknown = null;
   private dynamicMembershipChanged = false;
   private dynamicRevision = 0;
+  private staticRevision = 0;
   bakedFeedbackEnabled = true;
 
   /** Set for the duration of a counted bake; see `maybeGrowPool` and `bake`. */
@@ -242,6 +243,7 @@ export class SurfelGI {
    * split exists to avoid.
    */
   buildScene(renderer: THREE.WebGPURenderer, scene: THREE.Scene): void {
+    this.staticRevision++;
     this.gbuffer.prepareScene(scene);
     this.bvh = createSceneBVH(renderer, scene);
     // Built here rather than lazily: the buffers are bound into the integrator's
@@ -417,7 +419,7 @@ export class SurfelGI {
     const materialIds = new Set<string>();
     scene.traverse(object => {
       const mesh = object as THREE.Mesh;
-      if (!mesh.isMesh || !mesh.visible) return;
+      if (!mesh.isMesh || !mesh.visible || mesh.userData.giExclude === true) return;
       for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
         materialIds.add(material.uuid);
         if (!this.bvh!.materialIdByUUID.has(material.uuid)) needsMaterials = true;
@@ -435,6 +437,7 @@ export class SurfelGI {
   }
 
   get dynamicSceneRevision() { return this.dynamicRevision; }
+  get staticSceneRevision() { return this.staticRevision; }
 
   /**
    * The dynamic acceleration structure itself: bindings, world bounds and the enable

@@ -294,6 +294,18 @@ function installHooks(p: Pipeline, state: { paused: boolean; stepOnce: boolean; 
     sunPos: host.sun.position.toArray(), sunIntensity: host.sun.intensity, camera: camera.position.toArray(), target: controls.target.toArray(),
     fov: camera.fov, lightCfg: { ...sun.lightCfg }, giLights: giLightSummary(), pipeline: 'render-pipeline',
   }));
+  if (host.streaming?.snapshot) hook('__streaming', () => {
+    const dynamic = p.gi.dynamicBvhBundle;
+    return {
+      ...(host.streaming?.snapshot?.() as Record<string, unknown>),
+      staticSceneRevision: p.gi.staticSceneRevision,
+      dynamicSceneRevision: p.gi.dynamicSceneRevision,
+      staticTriangles: p.gi.bvhStats?.triangles ?? 0,
+      dynamicTriangles: dynamic?.triangleCount ?? 0,
+      dynamicMovers: dynamic?.moverCount ?? 0,
+      dynamicRefitMs: dynamic?.lastRebuildMs ?? 0,
+    };
+  });
   hook('__camera', (px: number, py: number, pz: number, tx: number, ty: number, tz: number) => {
     camera.position.set(px, py, pz); controls.target.set(tx, ty, tz); controls.update(); camera.updateMatrixWorld(); return true;
   });
@@ -338,8 +350,11 @@ function installAtlasHooks(p: Pipeline): void {
       resident: lod.pool.residency.residentKeys().length,
       feedbackReads: lod.feedback.readsDone,
       feedbackDrawn: lod.feedback.drawnLastRead,
+      feedbackTiles: lod.feedback.priorities.size,
+      feedbackMaxWeight: lod.feedback.maxPriorityLastRead,
       feedbackLevels: lod.feedback.levelsLastRead,
       feedbackOnTail: lod.feedback.onTailLastRead,
+      uploadedKiB: +(lod.pool.uploadedBytesLastFrame / 1024).toFixed(1),
       tailLevels: lod.pyramids.charts.reduce((counts: Record<number, number>, chart) => { counts[chart.tailLevel] = (counts[chart.tailLevel] ?? 0) + 1; return counts; }, {}),
       ...lod.pool.residency.stats,
       levels,
@@ -626,6 +641,10 @@ function startLoop(p: Pipeline, ui: PipelineUi, state: { paused: boolean; stepOn
     frameGraph.beginFrame();
     if (!state.frozen) p.dynamic?.update(now * 0.001);
     if (!post.still) host.update?.(now * 0.001);
+    const streamingChanges = host.streaming?.consumeChanges();
+    if (streamingChanges?.dynamicMembershipChanged) {
+      gi.syncDynamicScene(renderer, scene, { materialsChanged: streamingChanges.materialsChanged });
+    }
     post.fog.update(now);
     if (p.staticLight.probeLive) {
       const sunNow = `${host.sun.intensity.toFixed(4)}|${host.sun.position.x.toFixed(3)}|${host.sun.position.y.toFixed(3)}|${host.sun.position.z.toFixed(3)}`;
@@ -691,7 +710,10 @@ async function runPipeline(renderer: THREE.WebGPURenderer, gi: SurfelGI, host: S
   await staticLight.prepare(frameGraph, { bakeTree, interiorVolumes: host.interiorVolumes });
   if (lighting.probeIntensity !== undefined && staticLight.probes) staticLight.probes.intensity.value = lighting.probeIntensity;
   const live = { on: url.flag('surfelGi', false) };
-  const cachedReflections = trace.mode === 'cached'
+  if (trace.mode === 'cached' && host.streaming) {
+    console.warn('[streaming] cached reflections are disabled for streamed membership changes; using the live reflection pass');
+  }
+  const cachedReflections = trace.mode === 'cached' && !host.streaming
     ? installReflectionCache(renderer, gi, host, { contactTree: trace.tree(), probes: staticLight.probes, trace, frameGraph, url })
     : null;
   if (staticLight.probes && url.flag('probeSpecular', true) && !cachedReflections) {

@@ -11,6 +11,33 @@ export { ChartPyramidSet } from './chartPyramids.ts';
 export { TileResidency } from './tileResidency.ts';
 export { TilePool } from './tilePool.ts';
 export { DemandFeedback } from './feedback.ts';
+export { MemoryLightmapTileSource, expectedTileBytes, floatPixelsToHalf, type LightmapTileSource } from './tileSource.ts';
+export { ChartNamespace, remapLightmapCharts, restoreLocalLightmapCharts, type ChartAllocation } from './chartNamespace.ts';
+export { ChunkLightingRuntime, type ActiveChunkLighting } from './chunkLighting.ts';
+export {
+  WorldLightmapRegistry,
+  type ChunkChartIndexRecord,
+  type ChunkLightmapIndex,
+  type ChunkTileIndexRecord,
+  type RegisteredChunkLightmap,
+  type WorldChartHandle,
+  type WorldTileHandle,
+  validateChunkLightmapIndex,
+} from './worldLightmapRegistry.ts';
+export {
+  PinnedFallbackPool,
+  PinnedFallbackResidency,
+  type PinnedFallbackPlacement,
+} from './fallbackPool.ts';
+export {
+  decodeChunkLightmapPackage,
+  encodeChunkLightmapPackage,
+  extractChunkFallbackTile,
+  loadChunkLightmapPackage,
+  type ChunkFallbackRect,
+  type ChunkLightmapPackageInput,
+  type DecodedChunkLightmapPackage,
+} from './chunkLightmapPackage.ts';
 
 export interface LodSettings {
   tileSize: number;
@@ -56,7 +83,7 @@ export class LightmapLod {
   update(camera: THREE.Camera, viewport: { width: number; height: number }): void {
     this.feedback.resize(viewport.width, viewport.height);
     this.feedback.render(camera);
-    this.pool.serve(this.feedback.requests);
+    this.pool.serve(this.feedback.requests, this.feedback.priorities);
   }
 
   dispose(): void {

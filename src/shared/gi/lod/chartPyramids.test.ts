@@ -130,6 +130,27 @@ describe('TileResidency', () => {
     expect(residency.stats.coarsened).toBeGreaterThan(0);
   });
 
+  it('uploads the highest screen-impact tile first when the copy budget is tight', () => {
+    const set = build();
+    const residency = new TileResidency(set, { slotsPerSide: 8, copyBudget: 1 });
+    const low = set.tileKey(0, 0, 0, 0);
+    const high = set.tileKey(1, 0, 0, 0);
+    const result = residency.serve(new Set([low, high]), new Map([[low, 1], [high, 20]]));
+    expect(result.copies).toEqual([{ key: high, slot: 0 }]);
+    expect(residency.slotOf(high)).toBe(0);
+    expect(residency.slotOf(low)).toBeUndefined();
+  });
+
+  it('coarsens low-impact demand before a high-impact visible surface when capacity is tight', () => {
+    const set = build();
+    const residency = new TileResidency(set, { slotsPerSide: 1, copyBudget: 64 });
+    const low = set.tileKey(0, 1, 0, 0);
+    const high = set.tileKey(1, 1, 0, 0);
+    residency.serve(new Set([low, high]), new Map([[low, 1], [high, 50]]));
+    expect(residency.residentKeys()).toEqual([high]);
+    expect(residency.stats.coarsened).toBeGreaterThan(0);
+  });
+
   it('never points one chart at a slot holding another chart', () => {
     const set = build();
     const residency = new TileResidency(set, { slotsPerSide: 2, copyBudget: 64 });

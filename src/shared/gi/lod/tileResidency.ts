@@ -57,15 +57,20 @@ export class TileResidency {
    * frame degrades by level and never leaves a near surface on its tail while a far one
    * keeps detail.
    */
-  serve(requested: Set<number>): { copies: TileCopy[] } {
+  serve(requested: Set<number>, priorities?: ReadonlyMap<number, number>): { copies: TileCopy[] } {
     this.frame++;
-    const { wanted, coarsened } = this.fitToCapacity(requested);
+    const { wanted, weights, coarsened } = this.fitToCapacity(requested, priorities);
     for (const key of wanted) {
       const slot = this.keySlot.get(key);
       if (slot !== undefined) this.slotUsed[slot] = this.frame;
     }
     const missing = [...wanted].filter((key) => !this.keySlot.has(key))
-      .sort((a, b) => this.pyramids.tiles[b].level - this.pyramids.tiles[a].level);
+      .sort((a, b) => {
+        const levelDelta = this.pyramids.tiles[b].level - this.pyramids.tiles[a].level;
+        if (levelDelta !== 0) return levelDelta;
+        const weightDelta = (weights.get(b) ?? 0) - (weights.get(a) ?? 0);
+        return weightDelta !== 0 ? weightDelta : a - b;
+      });
     const copies: TileCopy[] = [];
     const touched = new Set<number>();
     let released = 0;
@@ -100,21 +105,37 @@ export class TileResidency {
     }
   }
 
-  private fitToCapacity(requested: Set<number>): { wanted: Set<number>; coarsened: number } {
+  private fitToCapacity(
+    requested: Set<number>,
+    priorities?: ReadonlyMap<number, number>,
+  ): { wanted: Set<number>; weights: Map<number, number>; coarsened: number } {
     const wanted = new Set(requested);
+    const weights = new Map<number, number>();
+    for (const key of wanted) weights.set(key, Math.max(0, priorities?.get(key) ?? 1));
+
     let coarsened = 0;
     while (wanted.size > this.capacity) {
-      const finest = [...wanted].sort((a, b) => this.pyramids.tiles[a].level - this.pyramids.tiles[b].level);
+      const finest = [...wanted].sort((a, b) => {
+        const levelDelta = this.pyramids.tiles[a].level - this.pyramids.tiles[b].level;
+        if (levelDelta !== 0) return levelDelta;
+        const weightDelta = (weights.get(a) ?? 0) - (weights.get(b) ?? 0);
+        return weightDelta !== 0 ? weightDelta : a - b;
+      });
       const level = this.pyramids.tiles[finest[0]].level;
       for (const key of finest) {
         if (this.pyramids.tiles[key].level !== level || wanted.size <= this.capacity) break;
+        const weight = weights.get(key) ?? 0;
         wanted.delete(key);
+        weights.delete(key);
         const parent = this.pyramids.parentKey(key);
-        if (parent !== null) wanted.add(parent);
+        if (parent !== null) {
+          wanted.add(parent);
+          weights.set(parent, (weights.get(parent) ?? 0) + weight);
+        }
         coarsened++;
       }
     }
-    return { wanted, coarsened };
+    return { wanted, weights, coarsened };
   }
 
   private slotFor(wanted: Set<number>): number {

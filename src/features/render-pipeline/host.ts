@@ -7,6 +7,12 @@ import type { MotionBlurSettings } from '../../shared/render/motionBlur.ts';
 import type { CloudSettings, SkyAtmosphereSettings } from '../../shared/render/sky/index.ts';
 import type { SurfelGI } from '../../shared/gi/index.ts';
 import type { ReflectionVolumeSpec } from '../../shared/gi/reflect/cache/reflectionVolumes.ts';
+import type { StreamedSceneChanges } from '../../shared/world/index.ts';
+
+export interface SceneStreamingHost {
+  consumeChanges(): StreamedSceneChanges;
+  snapshot?(): unknown;
+}
 
 export interface SceneHost {
   scene: THREE.Scene;
@@ -29,6 +35,7 @@ export interface SceneHost {
   sky?: Partial<SkyAtmosphereSettings>;
   clouds?: Partial<CloudSettings>;
   interiorVolumes?: THREE.Box3[];
+  streaming?: SceneStreamingHost;
 }
 
 export interface PipelineUi {

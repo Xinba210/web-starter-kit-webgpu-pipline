@@ -21,6 +21,7 @@ export type TileResolver = (chart: number, level: number, atlasX: number, atlasY
  */
 export class DemandFeedback {
   requests = new Set<number>();
+  priorities = new Map<number, number>();
   private readonly target: THREE.RenderTarget;
   private readonly material: THREE.NodeMaterial;
   private readonly sourceSize = uniform(new THREE.Vector2(1, 1));
@@ -33,6 +34,7 @@ export class DemandFeedback {
   drawnLastRead = 0;
   levelsLastRead: Record<number, number> = {};
   onTailLastRead = 0;
+  maxPriorityLastRead = 0;
 
   constructor(
     private readonly renderer: THREE.WebGPURenderer,
@@ -94,8 +96,10 @@ export class DemandFeedback {
     try {
       const raw = await this.renderer.readRenderTargetPixelsAsync(this.target, 0, 0, this.target.width, this.target.height) as Float32Array;
       const fresh = new Set<number>();
+      const priorities = new Map<number, number>();
       let drawn = 0;
       let onTail = 0;
+      let maxPriority = 0;
       const levels: Record<number, number> = {};
       for (let pixel = 0; pixel < raw.length; pixel += 4) {
         const packed = Math.round(raw[pixel]);
@@ -106,12 +110,19 @@ export class DemandFeedback {
         levels[level] = (levels[level] ?? 0) + 1;
         const key = this.resolve(chart, level, raw[pixel + 1], raw[pixel + 2]);
         if (key === null) onTail++;
-        else fresh.add(key);
+        else {
+          fresh.add(key);
+          const weight = (priorities.get(key) ?? 0) + 1;
+          priorities.set(key, weight);
+          maxPriority = Math.max(maxPriority, weight);
+        }
       }
       this.requests = fresh;
+      this.priorities = priorities;
       this.drawnLastRead = drawn;
       this.levelsLastRead = levels;
       this.onTailLastRead = onTail;
+      this.maxPriorityLastRead = maxPriority;
       this.readsDone++;
     } catch (error) {
       console.warn(`[lod] demand readback failed: ${error}`);
