@@ -133,7 +133,21 @@ function target(
   return result;
 }
 
-export class PinnedFallbackPool {
+export interface ChunkFallbackPool {
+  readonly texture: THREE.Texture;
+  readonly chartCapacity: number;
+  pin(
+    owner: string,
+    packageValue: DecodedChunkLightmapPackage,
+    registered: RegisteredChunkLightmap,
+    registry: WorldLightmapRegistry,
+  ): PinnedFallbackPlacement[];
+  release(owner: string): number;
+  sampler(): { sample: (uv1: THREE.Node) => THREE.Node };
+  snapshot(): unknown;
+}
+
+export class PinnedFallbackPool implements ChunkFallbackPool {
   readonly physicalTile: number;
   readonly residency: PinnedFallbackResidency;
   readonly target: THREE.RenderTarget;
