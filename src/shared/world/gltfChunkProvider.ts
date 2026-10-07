@@ -68,6 +68,20 @@ async function loadGlb(loader: GLTFLoader, url: string, baseUrl: string, signal:
   return gltf.scene;
 }
 
+function prepareChunkLightmapAttributes(root: THREE.Object3D, chartCount: number): void {
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const uv1 = mesh.geometry.getAttribute('uv1');
+    if (!uv1) throw new Error(`streamed lightmapped mesh ${mesh.name || mesh.uuid} has no uv1 attribute`);
+    if (mesh.geometry.getAttribute('lightmapChart')) return;
+    if (chartCount !== 1) {
+      throw new Error(`streamed lightmapped mesh ${mesh.name || mesh.uuid} must provide lightmapChart for ${chartCount} charts`);
+    }
+    mesh.geometry.setAttribute('lightmapChart', new THREE.Float32BufferAttribute(new Float32Array(uv1.count), 1));
+  });
+}
+
 function nameRoot(root: THREE.Object3D, asset: StreamedAssetSpec, tier: 'active' | 'proxy'): void {
   root.name = `streamed-${tier}-${asset.id}`;
   root.userData.assetId = asset.id;
@@ -97,6 +111,7 @@ export function createGltfChunkProvider(
           const active = await loadGlb(loader, asset.activeGlb, baseUrl, signal);
           nameRoot(active, asset, 'active');
           applyTransform(active, asset.transform);
+          if (chunk?.lighting) prepareChunkLightmapAttributes(active, chunk.lighting.chartCount);
           activeRoot.add(active);
 
           if (asset.proxyGlb) {
