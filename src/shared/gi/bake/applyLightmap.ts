@@ -54,6 +54,7 @@ export function applyLightmap(
     if (!mesh.isMesh) return;
     if (!receiver(mesh)) return;
     if (!mesh.geometry.getAttribute('uv1')) return;
+    if (sampling && !mesh.geometry.getAttribute('lightmapChart')) return;
     // Per receiver, not per material: the final composite must not add the full
     // realtime indirect term to a surface which already received its lightmap.
     mesh.userData.bakedLightReceiver = true;
