@@ -1,5 +1,20 @@
 import * as THREE from 'three/webgpu';
 import {
+  Fn,
+  attribute,
+  float,
+  floor,
+  int,
+  ivec2,
+  max,
+  texture,
+  textureLoad,
+  vec2,
+  vec3,
+  vec4,
+} from 'three/tsl';
+import { PAGE_TABLE_WIDTH } from './tileResidency.ts';
+import {
   extractChunkFallbackTile,
   type DecodedChunkLightmapPackage,
 } from './chunkLightmapPackage.ts';
@@ -99,14 +114,20 @@ interface GpuBackend {
   get(texture: THREE.Texture): { texture?: GPUTexture };
 }
 
-function target(renderer: THREE.WebGPURenderer, side: number): THREE.RenderTarget {
-  const result = new THREE.RenderTarget(side, side, {
-    type: THREE.HalfFloatType,
+function target(
+  renderer: THREE.WebGPURenderer,
+  width: number,
+  height: number,
+  type: THREE.TextureDataType,
+  filter: THREE.MagnificationTextureFilter,
+): THREE.RenderTarget {
+  const result = new THREE.RenderTarget(width, height, {
+    type,
     format: THREE.RGBAFormat,
     depthBuffer: false,
     generateMipmaps: false,
   });
-  result.texture.minFilter = result.texture.magFilter = THREE.LinearFilter;
+  result.texture.minFilter = result.texture.magFilter = filter;
   result.texture.colorSpace = THREE.NoColorSpace;
   renderer.initTexture(result.texture);
   return result;
@@ -118,13 +139,20 @@ export class PinnedFallbackPool {
   readonly target: THREE.RenderTarget;
   readonly texture: THREE.Texture;
   readonly size: number;
+  readonly pageTarget: THREE.RenderTarget;
+  readonly pageTexture: THREE.Texture;
+  readonly pageData: Float32Array;
+  readonly chartCapacity: number;
+  private readonly ownerCharts = new Map<string, WorldChartHandle[]>();
   uploadedBytesLastPin = 0;
+  uploadedPageBytesLastChange = 0;
 
   constructor(
     private readonly renderer: THREE.WebGPURenderer,
     readonly tileSize: number,
     readonly border: number,
     readonly slotsPerSide: number,
+    chartCapacity = 65536,
   ) {
     if (!Number.isInteger(tileSize) || tileSize < 1) throw new Error('fallback tileSize must be positive');
     if (!Number.isInteger(border) || border < 0) throw new Error('fallback border must be non-negative');
@@ -132,8 +160,13 @@ export class PinnedFallbackPool {
     this.physicalTile = tileSize + border * 2;
     this.residency = new PinnedFallbackResidency(slotsPerSide * slotsPerSide);
     this.size = slotsPerSide * this.physicalTile;
-    this.target = target(renderer, this.size);
+    this.target = target(renderer, this.size, this.size, THREE.HalfFloatType, THREE.LinearFilter);
     this.texture = this.target.texture;
+    this.chartCapacity = chartCapacity;
+    const rows = Math.ceil(chartCapacity / PAGE_TABLE_WIDTH);
+    this.pageTarget = target(renderer, PAGE_TABLE_WIDTH, rows, THREE.FloatType, THREE.NearestFilter);
+    this.pageTexture = this.pageTarget.texture;
+    this.pageData = new Float32Array(PAGE_TABLE_WIDTH * rows * 4);
   }
 
   pin(
@@ -166,11 +199,37 @@ export class PinnedFallbackPool {
       throw error;
     }
 
+    this.ownerCharts.set(owner, placements.map((placement) => placement.chart));
+    let from = Number.POSITIVE_INFINITY;
+    let to = -1;
+    for (let localChart = 0; localChart < placements.length; localChart++) {
+      const placement = placements[localChart];
+      const rect = packageValue.fallbackCharts[localChart];
+      const at = placement.chart.slot * 4;
+      this.pageData.set([placement.slot, 1, rect.width, rect.height], at);
+      from = Math.min(from, placement.chart.slot);
+      to = Math.max(to, placement.chart.slot);
+    }
+    if (to >= 0) this.uploadPageRange(from, to);
+
     this.uploadedBytesLastPin = bytes;
     return placements;
   }
 
   release(owner: string): number {
+    const charts = this.ownerCharts.get(owner);
+    if (charts) {
+      let from = Number.POSITIVE_INFINITY;
+      let to = -1;
+      for (const chart of charts) {
+        const at = chart.slot * 4;
+        this.pageData.fill(0, at, at + 4);
+        from = Math.min(from, chart.slot);
+        to = Math.max(to, chart.slot);
+      }
+      this.ownerCharts.delete(owner);
+      if (to >= 0) this.uploadPageRange(from, to);
+    }
     return this.residency.release(owner);
   }
 
@@ -181,6 +240,7 @@ export class PinnedFallbackPool {
     pinned: number;
     free: number;
     uploadedKiBLastPin: number;
+    uploadedPageKiBLastChange: number;
   } {
     const state = this.residency.snapshot();
     return {
@@ -190,11 +250,56 @@ export class PinnedFallbackPool {
       pinned: state.pinned,
       free: state.free,
       uploadedKiBLastPin: +(this.uploadedBytesLastPin / 1024).toFixed(1),
+      uploadedPageKiBLastChange: +(this.uploadedPageBytesLastChange / 1024).toFixed(1),
     };
+  }
+
+  sampler(): { sample: (uv1: THREE.Node) => THREE.Node } {
+    const page = this.pageTexture;
+    const pool = this.texture;
+    const tableWidth = float(PAGE_TABLE_WIDTH);
+    const slotsPerSide = float(this.slotsPerSide);
+    const physical = float(this.physicalTile);
+    const border = float(this.border);
+    const poolExtent = vec2(this.size, this.size);
+
+    const sample = Fn(([uv1]: [THREE.Node]) => {
+      const chart = floor(attribute('lightmapChart', 'float').add(0.5));
+      const record = vec4(textureLoad(page, ivec2(int(chart.mod(tableWidth)), int(floor(chart.div(tableWidth))))));
+      const slot = record.x;
+      const valid = record.y;
+      const dimensions = max(record.zw, vec2(1));
+      const slotOrigin = vec2(slot.mod(slotsPerSide), floor(slot.div(slotsPerSide))).mul(physical);
+      const local = vec2(uv1).clamp(vec2(0), vec2(1)).mul(dimensions.sub(1)).add(0.5);
+      const radiance = vec3(texture(pool, slotOrigin.add(border).add(local).div(poolExtent)).level(float(0)));
+      return valid.greaterThan(0.5).select(radiance, vec3(0));
+    });
+
+    return { sample: (uv1: THREE.Node) => sample(uv1) };
   }
 
   dispose(): void {
     this.target.dispose();
+    this.pageTarget.dispose();
+  }
+
+  private uploadPageRange(from: number, to: number): void {
+    const firstRow = Math.floor(from / PAGE_TABLE_WIDTH);
+    const lastRow = Math.floor(to / PAGE_TABLE_WIDTH);
+    const rows = this.pageData.subarray(
+      firstRow * PAGE_TABLE_WIDTH * 4,
+      (lastRow + 1) * PAGE_TABLE_WIDTH * 4,
+    );
+    const backend = this.renderer.backend as unknown as GpuBackend;
+    const texture = backend.get(this.pageTexture).texture;
+    if (!texture) throw new Error('fallback page-table GPU texture is unavailable');
+    backend.device.queue.writeTexture(
+      { texture, origin: { x: 0, y: firstRow } },
+      rows.buffer as ArrayBuffer,
+      { offset: rows.byteOffset, bytesPerRow: PAGE_TABLE_WIDTH * 16 },
+      { width: PAGE_TABLE_WIDTH, height: lastRow - firstRow + 1 },
+    );
+    this.uploadedPageBytesLastChange = rows.byteLength;
   }
 
   private write(slot: number, pixels: Uint16Array): void {
