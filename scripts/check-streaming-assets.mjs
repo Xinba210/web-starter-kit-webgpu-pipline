@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { PNG } from 'pngjs';
 
 const port = process.env.PORT ?? '5188';
 const out = 'shots/streaming';
@@ -46,14 +47,68 @@ const state = () => page.evaluate(() => {
   const scene = window.__fog?.frameGraph?.().scene;
   const active = scene?.getObjectByName('streamed-active-xinba-pavilion-fixture');
   const proxy = scene?.getObjectByName('streamed-proxy-xinba-pavilion-fixture');
+  const visibleInHierarchy = (object) => {
+    if (!object) return false;
+    let current = object;
+    while (current) {
+      if (!current.visible) return false;
+      current = current.parent;
+    }
+    return true;
+  };
+  let bakedReceivers = 0;
+  active?.traverse((object) => {
+    if (object.isMesh && object.userData.bakedLightReceiver === true) bakedReceivers++;
+  });
   return {
     stream,
     activeExists: !!active,
-    activeVisible: active?.visible ?? false,
+    activeVisible: visibleInHierarchy(active),
     proxyExists: !!proxy,
-    proxyVisible: proxy?.visible ?? false,
+    proxyVisible: visibleInHierarchy(proxy),
+    bakedReceivers,
   };
 });
+
+const bakedFrameStats = async (name) => {
+  const visibility = await page.evaluate(() => {
+    const scene = window.__fog.frameGraph().scene;
+    const activeChunk = scene.getObjectByName('streamed-active-chunk-0-0');
+    const state = scene.children.map((child) => [child.uuid, child.visible]);
+    for (const child of scene.children) child.visible = child === activeChunk;
+    window.__fog.split('baked', 0);
+    return state;
+  });
+  await waitFrames(12);
+  const path = `${out}/${name}.png`;
+  await page.locator('canvas').screenshot({ path });
+  const image = PNG.sync.read(await readFile(path));
+  let nonBlack = 0;
+  let sum = 0;
+  let max = 0;
+  for (let i = 0; i < image.data.length; i += 4) {
+    const luma = 0.2126 * image.data[i] + 0.7152 * image.data[i + 1] + 0.0722 * image.data[i + 2];
+    sum += luma;
+    max = Math.max(max, luma);
+    if (luma > 2) nonBlack++;
+  }
+  await page.evaluate((state) => {
+    const scene = window.__fog.frameGraph().scene;
+    const byId = new Map(state);
+    for (const child of scene.children) {
+      const visible = byId.get(child.uuid);
+      if (visible !== undefined) child.visible = visible;
+    }
+    window.__fog.split('off', 0.5);
+  }, visibility);
+  await waitFrames(6);
+  return {
+    nonBlack,
+    fraction: nonBlack / (image.width * image.height),
+    meanLuma: sum / (image.width * image.height),
+    maxLuma: max,
+  };
+};
 
 const move = async (x, z, targetX, targetZ) => {
   await page.evaluate(([px, pz, tx, tz]) => window.__camera(px, 7, pz, tx, 2.2, tz), [x, z, targetX, targetZ]);
@@ -98,6 +153,12 @@ try {
   assert.equal(report.active.stream.lighting.packageTileSize, 64, 'XVLM tile shape must reach runtime diagnostics');
   assert.equal(report.active.stream.lighting.fallback.pinned, 1, 'Active XVLM chart must own one pinned GPU fallback slot');
   assert.ok(report.active.stream.lighting.fallback.uploadedKiBLastPin > 0, 'fallback pixels must be uploaded to the GPU pool');
+  assert.ok(report.active.stream.lighting.fallback.uploadedPageKiBLastChange > 0, 'world lightmap page table must upload an active chart entry');
+  assert.ok(report.active.bakedReceivers > 0, 'Active GLB must become a baked-light receiver only after XVLM fallback is ready');
+
+  report.bakedOnly = await bakedFrameStats('active-baked-only');
+  assert.ok(report.bakedOnly.nonBlack > 100, `streamed baked-only frame is black: ${JSON.stringify(report.bakedOnly)}`);
+  assert.ok(report.bakedOnly.maxLuma > 4, `streamed baked-only signal is too weak: ${JSON.stringify(report.bakedOnly)}`);
 
   await move(28, 9, 0, 2);
   await waitFor(
@@ -120,6 +181,7 @@ try {
   assert.equal(report.proxy.stream.lighting.activeChunks, 0, 'Proxy tier must release Active chunk lighting ownership');
   assert.equal(report.proxy.stream.lighting.chartsUsed, 0, 'Proxy tier must release world chart slots');
   assert.equal(report.proxy.stream.lighting.fallback.pinned, 0, 'Proxy tier must release pinned GPU fallback slots');
+  assert.equal(report.proxy.bakedReceivers, 0, 'Proxy tier must remove streamed baked-light receiver state');
 
   await move(82, 9, 82, 0);
   await waitFor(
@@ -163,6 +225,7 @@ try {
   assert.equal(report.returned.stream.lighting.readyChunks, 1, 'returning must reload and validate XVLM');
   assert.equal(report.returned.stream.lighting.chartsUsed, 1, 'returning Active chunk must reacquire chart ownership');
   assert.equal(report.returned.stream.lighting.fallback.pinned, 1, 'returning Active chunk must reacquire a pinned fallback slot');
+  assert.ok(report.returned.bakedReceivers > 0, 'returning Active chunk must restore baked-light receiver state');
 
   assert.deepEqual(errors, [], `browser errors: ${errors.join(' | ')}`);
   await writeFile(`${out}/check.json`, JSON.stringify(report, null, 2));
