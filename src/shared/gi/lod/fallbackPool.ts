@@ -198,33 +198,36 @@ export class PinnedFallbackPool implements ChunkFallbackPool {
       throw new Error('fallback chart count does not match registered chart range');
     }
 
+    this.release(owner);
     const handles = packageValue.index.charts.map((_, localChart) => registry.chartHandle(owner, localChart));
     const placements = this.residency.pin(owner, handles, registry);
     let bytes = 0;
+    let from = Number.POSITIVE_INFINITY;
+    let to = -1;
 
     try {
       for (let localChart = 0; localChart < placements.length; localChart++) {
         const pixels = extractChunkFallbackTile(packageValue, localChart);
         this.write(placements[localChart].slot, pixels);
         bytes += pixels.byteLength;
+
+        const placement = placements[localChart];
+        const rect = packageValue.fallbackCharts[localChart];
+        const at = placement.chart.slot * 4;
+        this.pageData.set([placement.slot, 1, rect.width, rect.height], at);
+        from = Math.min(from, placement.chart.slot);
+        to = Math.max(to, placement.chart.slot);
       }
+      if (to >= 0) this.uploadPageRange(from, to);
+      this.ownerCharts.set(owner, placements.map((placement) => placement.chart));
     } catch (error) {
+      for (const placement of placements) {
+        const at = placement.chart.slot * 4;
+        this.pageData.fill(0, at, at + 4);
+      }
       this.residency.release(owner);
       throw error;
     }
-
-    this.ownerCharts.set(owner, placements.map((placement) => placement.chart));
-    let from = Number.POSITIVE_INFINITY;
-    let to = -1;
-    for (let localChart = 0; localChart < placements.length; localChart++) {
-      const placement = placements[localChart];
-      const rect = packageValue.fallbackCharts[localChart];
-      const at = placement.chart.slot * 4;
-      this.pageData.set([placement.slot, 1, rect.width, rect.height], at);
-      from = Math.min(from, placement.chart.slot);
-      to = Math.max(to, placement.chart.slot);
-    }
-    if (to >= 0) this.uploadPageRange(from, to);
 
     this.uploadedBytesLastPin = bytes;
     return placements;
@@ -232,6 +235,7 @@ export class PinnedFallbackPool implements ChunkFallbackPool {
 
   release(owner: string): number {
     const charts = this.ownerCharts.get(owner);
+    let uploadError: unknown = null;
     if (charts) {
       let from = Number.POSITIVE_INFINITY;
       let to = -1;
@@ -242,9 +246,17 @@ export class PinnedFallbackPool implements ChunkFallbackPool {
         to = Math.max(to, chart.slot);
       }
       this.ownerCharts.delete(owner);
-      if (to >= 0) this.uploadPageRange(from, to);
+      if (to >= 0) {
+        try {
+          this.uploadPageRange(from, to);
+        } catch (error) {
+          uploadError = error;
+        }
+      }
     }
-    return this.residency.release(owner);
+    const released = this.residency.release(owner);
+    if (uploadError) throw uploadError;
+    return released;
   }
 
   snapshot(): {
