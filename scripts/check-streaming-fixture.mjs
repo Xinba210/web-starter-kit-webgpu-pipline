@@ -19,6 +19,7 @@ function parseGlb(buffer) {
     triangles: indexAccessor.count / 3,
     vertices: positionAccessor.count,
     generator: json.asset.generator,
+    hasUv1: primitive.attributes.TEXCOORD_1 !== undefined,
   };
 }
 
@@ -54,6 +55,7 @@ assert.ok(active.triangles > proxy.triangles, `Active must exceed Proxy detail: 
 assert.ok(active.vertices > proxy.vertices, `Active must exceed Proxy vertices: ${active.vertices} vs ${proxy.vertices}`);
 assert.match(active.generator, /Xinba procedural streaming fixture/);
 assert.match(proxy.generator, /Xinba procedural streaming fixture/);
+assert.equal(active.hasUv1, true, 'Active streamed GLB must carry TEXCOORD_1 for XVLM sampling');
 assert.equal(xvlm.metadata.revision, lighting.revision);
 assert.equal(xvlm.metadata.charts.length, lighting.chartCount);
 assert.equal(xvlm.metadata.metresPerTexel, lighting.metresPerTexel);
