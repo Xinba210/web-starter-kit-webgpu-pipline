@@ -37,11 +37,14 @@ export function emissionBeforeLightmap(material: THREE.Material): THREE.Node | n
  * material that accepts an arbitrary additive HDR term without fighting the built-in
  * light loop.
  */
+export type LightmapReceiverPredicate = (mesh: THREE.Mesh) => boolean;
+
 export function applyLightmap(
-  scene: THREE.Scene,
+  scene: THREE.Object3D,
   lightmap: THREE.Texture,
   intensityUniform: ReturnType<typeof uniform>,
   sampling?: { sample: (uv: THREE.Node, bounds?: THREE.Node) => THREE.Node },
+  receiver: LightmapReceiverPredicate = (mesh) => mesh.layers.isEnabled(Layer.GiStatic),
 ): number {
   const seen = new Set<THREE.Material>();
   let applied = 0;
@@ -49,7 +52,7 @@ export function applyLightmap(
   scene.traverse((object) => {
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh) return;
-    if (!mesh.layers.isEnabled(Layer.GiStatic)) return;
+    if (!receiver(mesh)) return;
     if (!mesh.geometry.getAttribute('uv1')) return;
     // Per receiver, not per material: the final composite must not add the full
     // realtime indirect term to a surface which already received its lightmap.
@@ -131,4 +134,29 @@ export function applyLightmap(
 
   console.log(`[lightmap] applied to ${applied} materials`);
   return applied;
+}
+
+export function removeLightmap(root: THREE.Object3D): number {
+  const seen = new Set<THREE.Material>();
+  let removed = 0;
+
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.userData.bakedLightReceiver = false;
+
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const material of materials) {
+      if (seen.has(material) || !originalEmission.has(material)) continue;
+      seen.add(material);
+      const standard = material as THREE.MeshStandardNodeMaterial;
+      standard.emissiveNode = originalEmission.get(material) ?? null;
+      standard.userData.lightmapApplied = false;
+      standard.needsUpdate = true;
+      originalEmission.delete(material);
+      removed++;
+    }
+  });
+
+  return removed;
 }
