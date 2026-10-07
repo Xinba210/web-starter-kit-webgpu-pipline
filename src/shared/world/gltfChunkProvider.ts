@@ -68,6 +68,38 @@ async function loadGlb(loader: GLTFLoader, url: string, baseUrl: string, signal:
   return gltf.scene;
 }
 
+function promotePbrNodeMaterials(root: THREE.Object3D): void {
+  const converted = new Map<THREE.Material, THREE.Material>();
+
+  const convert = (material: THREE.Material): THREE.Material => {
+    const cached = converted.get(material);
+    if (cached) return cached;
+    const pbr = material as THREE.MeshStandardMaterial & { isMeshPhysicalMaterial?: boolean; isNodeMaterial?: boolean };
+    if (!pbr.isMeshStandardMaterial || pbr.isNodeMaterial) {
+      converted.set(material, material);
+      return material;
+    }
+
+    const node = pbr.isMeshPhysicalMaterial
+      ? new THREE.MeshPhysicalNodeMaterial()
+      : new THREE.MeshStandardNodeMaterial();
+    node.copy(pbr as never);
+    node.name = material.name;
+    node.userData = { ...material.userData, streamedNodeMaterial: true };
+    converted.set(material, node);
+    material.dispose();
+    return node;
+  };
+
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.material = Array.isArray(mesh.material)
+      ? mesh.material.map(convert)
+      : convert(mesh.material);
+  });
+}
+
 function prepareChunkLightmapAttributes(root: THREE.Object3D, chartCount: number): void {
   root.traverse((object) => {
     const mesh = object as THREE.Mesh;
@@ -111,6 +143,7 @@ export function createGltfChunkProvider(
           const active = await loadGlb(loader, asset.activeGlb, baseUrl, signal);
           nameRoot(active, asset, 'active');
           applyTransform(active, asset.transform);
+          promotePbrNodeMaterials(active);
           if (chunk?.lighting) prepareChunkLightmapAttributes(active, chunk.lighting.chartCount);
           activeRoot.add(active);
 
