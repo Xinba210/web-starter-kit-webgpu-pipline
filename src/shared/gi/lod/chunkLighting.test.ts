@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
+import { vec3 } from 'three/tsl';
 import { ChunkLightingRuntime } from './chunkLighting.ts';
 import type { DecodedChunkLightmapPackage } from './chunkLightmapPackage.ts';
+import type { ChunkFallbackPool, PinnedFallbackPlacement } from './fallbackPool.ts';
 
 function rootWithCharts(): THREE.Group {
   const geometry = new THREE.BufferGeometry();
@@ -10,9 +12,16 @@ function rootWithCharts(): THREE.Group {
     1, 0, 0,
     0, 1, 0,
   ], 3));
+  geometry.setAttribute('uv1', new THREE.Float32BufferAttribute([
+    0, 0,
+    1, 0,
+    0, 1,
+  ], 2));
   geometry.setAttribute('lightmapChart', new THREE.Float32BufferAttribute([0, 1, 1], 1));
   const root = new THREE.Group();
-  root.add(new THREE.Mesh(geometry, new THREE.MeshBasicMaterial()));
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardNodeMaterial({ color: 0xffffff }));
+  mesh.userData.streamedChunkRole = 'active';
+  root.add(mesh);
   return root;
 }
 
@@ -40,6 +49,37 @@ function packageValue(
     storeBytes: 128,
     tile(localTile: number) {
       throw new Error(`XVLM has no tile ${localTile}`);
+    },
+  };
+}
+
+function fakePool(chartCapacity = 8, failPin = false): ChunkFallbackPool {
+  const texture = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+  let pinned = 0;
+  let releases = 0;
+  return {
+    texture,
+    chartCapacity,
+    pin(owner, packageValue, registered, registry): PinnedFallbackPlacement[] {
+      if (failPin) throw new Error('synthetic fallback pin failure');
+      const placements = packageValue.index.charts.map((_, localChart) => ({
+        chart: registry.chartHandle(owner, localChart),
+        slot: localChart,
+      }));
+      pinned += registered.charts.count;
+      return placements;
+    },
+    release() {
+      const released = pinned;
+      pinned = 0;
+      releases++;
+      return released;
+    },
+    sampler() {
+      return { sample: () => vec3(0.5) };
+    },
+    snapshot() {
+      return { pinned, releases };
     },
   };
 }
@@ -162,6 +202,54 @@ describe('ChunkLightingRuntime', () => {
     expect(runtime.get('bad')?.error).toMatch(/exceeds chunk chart count/);
     expect(runtime.registry.snapshot()).toMatchObject({ chunks: 0, chartsUsed: 0, tilesUsed: 0 });
     expect(runtime.snapshot()).toMatchObject({ packageTileSize: null, packageBorder: null });
+  });
+
+  it('keeps probe/live GI ownership until fallback registration finishes, then removes baked binding on deactivate', async () => {
+    let resolvePackage: ((value: DecodedChunkLightmapPackage) => void) | undefined;
+    const pool = fakePool(8);
+    const runtime = new ChunkLightingRuntime(8, 8, () => new Promise((resolve) => {
+      resolvePackage = resolve;
+    }), pool);
+    const root = rootWithCharts();
+    const mesh = root.children[0] as THREE.Mesh;
+    const material = mesh.material as THREE.MeshStandardNodeMaterial;
+
+    runtime.activate('0:0', root, spec);
+    expect(runtime.get('0:0')?.state).toBe('loading');
+    expect(mesh.userData.bakedLightReceiver).not.toBe(true);
+    expect(material.userData.lightmapApplied).not.toBe(true);
+
+    resolvePackage?.(packageValue());
+    await settle();
+
+    expect(runtime.get('0:0')?.state).toBe('ready');
+    expect(mesh.userData.bakedLightReceiver).toBe(true);
+    expect(material.userData.lightmapApplied).toBe(true);
+    expect(runtime.snapshot().fallback).toMatchObject({ pinned: 2 });
+
+    runtime.deactivate('0:0');
+    expect(mesh.userData.bakedLightReceiver).toBe(false);
+    expect(material.userData.lightmapApplied).toBe(false);
+    expect(runtime.registry.snapshot()).toMatchObject({ chunks: 0, chartsUsed: 0 });
+    expect(runtime.snapshot().fallback).toMatchObject({ pinned: 0 });
+  });
+
+  it('rolls back registry and receiver state when fallback publication fails', async () => {
+    const runtime = new ChunkLightingRuntime(8, 8, async () => packageValue(), fakePool(8, true));
+    const root = rootWithCharts();
+    const mesh = root.children[0] as THREE.Mesh;
+
+    runtime.activate('0:0', root, spec);
+    await settle();
+
+    expect(runtime.get('0:0')?.state).toBe('failed');
+    expect(runtime.get('0:0')?.error).toMatch(/synthetic fallback pin failure/);
+    expect(mesh.userData.bakedLightReceiver).toBe(false);
+    expect(runtime.registry.snapshot()).toMatchObject({ chunks: 0, chartsUsed: 0, tilesUsed: 0 });
+  });
+
+  it('rejects a fallback page table whose chart capacity differs from the registry', () => {
+    expect(() => new ChunkLightingRuntime(8, 8, async () => packageValue(), fakePool(16))).toThrow(/capacity/);
   });
 
   it('enforces one physical tile shape across active chunk packages', async () => {
