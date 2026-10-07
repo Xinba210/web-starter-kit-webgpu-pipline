@@ -8,7 +8,7 @@ import {
   loadChunkLightmapPackage,
   type DecodedChunkLightmapPackage,
 } from './chunkLightmapPackage.ts';
-import type { PinnedFallbackPool } from './fallbackPool.ts';
+import type { ChunkFallbackPool } from './fallbackPool.ts';
 import {
   WorldLightmapRegistry,
   type RegisteredChunkLightmap,
@@ -47,8 +47,11 @@ export class ChunkLightingRuntime implements StreamedChunkLightingController {
     chartCapacity = 65536,
     tileCapacity = 262144,
     private readonly loadPackage: ChunkPackageLoader = loadChunkLightmapPackage,
-    private readonly fallbackPool?: PinnedFallbackPool,
+    private readonly fallbackPool?: ChunkFallbackPool,
   ) {
+    if (fallbackPool && fallbackPool.chartCapacity !== chartCapacity) {
+      throw new Error(`fallback chart capacity ${fallbackPool.chartCapacity} does not match registry ${chartCapacity}`);
+    }
     this.registry = new WorldLightmapRegistry(chartCapacity, tileCapacity);
   }
 
