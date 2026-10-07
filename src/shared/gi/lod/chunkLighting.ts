@@ -1,4 +1,6 @@
 import type * as THREE from 'three/webgpu';
+import { uniform } from 'three/tsl';
+import { applyLightmap, removeLightmap } from '../bake/applyLightmap.ts';
 import type { StreamedChunkLightingSpec } from '../../world/assetManifest.ts';
 import type { StreamedChunkLightingController } from '../../world/streamedScene.ts';
 import { remapLightmapCharts, restoreLocalLightmapCharts } from './chartNamespace.ts';
@@ -39,6 +41,7 @@ export class ChunkLightingRuntime implements StreamedChunkLightingController {
   private request = 0;
   private packageTileSize: number | null = null;
   private packageBorder: number | null = null;
+  readonly intensity = uniform(1);
 
   constructor(
     chartCapacity = 65536,
@@ -79,7 +82,9 @@ export class ChunkLightingRuntime implements StreamedChunkLightingController {
     if (!entry) return;
     this.active.delete(owner);
     entry.controller.abort();
+    removeLightmap(entry.root);
     this.fallbackPool?.release(owner);
+    restoreLocalLightmapCharts(entry.root);
     if (entry.registered) this.registry.unregister(owner);
   }
 
@@ -157,13 +162,24 @@ export class ChunkLightingRuntime implements StreamedChunkLightingController {
       }
       entry.registered = registered;
       entry.remappedGeometries = remapLightmapCharts(entry.root, registered.charts);
-      this.fallbackPool?.pin(entry.owner, packageValue, registered, this.registry);
+      if (this.fallbackPool) {
+        this.fallbackPool.pin(entry.owner, packageValue, registered, this.registry);
+        const applied = applyLightmap(
+          entry.root,
+          this.fallbackPool.texture,
+          this.intensity,
+          this.fallbackPool.sampler(),
+          (mesh) => mesh.userData.streamedChunkRole === 'active',
+        );
+        if (applied < 1) throw new Error('chunk lighting has no eligible streamed lightmap receiver');
+      }
       entry.package = packageValue;
       this.packageTileSize ??= packageValue.tileSize;
       this.packageBorder ??= packageValue.border;
       entry.state = 'ready';
     } catch (error) {
       if (!this.isCurrent(entry) || entry.controller.signal.aborted) return;
+      removeLightmap(entry.root);
       this.fallbackPool?.release(entry.owner);
       restoreLocalLightmapCharts(entry.root);
       if (entry.registered) {
